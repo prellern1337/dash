@@ -86,6 +86,7 @@ const fallbackStibor = {
   date: null,
   fetchedAt: null,
   message: null,
+  note: null,
 };
 
 const yieldRows = [
@@ -105,6 +106,10 @@ const yieldAverage = yieldRows.reduce(
 
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 const formatNumber = (value, decimals = 2) => Number(value).toFixed(decimals).replace(".", ",");
+
+function hasNumericValue(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
 
 function getFxDecimals(pairName) {
   return pairName === "SEK/NOK" ? 3 : 2;
@@ -442,13 +447,14 @@ export default function MarketDashboardPrototype() {
 
         if (!cancelled) {
           setStiborState({
-            status: "ok",
+            status: payload.status === "fallback" ? "fallback" : "ok",
             sourceName: payload.sourceName || "SFBF",
             sourceUrl: payload.sourceUrl || "https://swfbf.se/stibor/rates/",
             value: payload.value,
             date: payload.date,
             fetchedAt: payload.fetchedAt,
-            message: null,
+            message: payload.message || null,
+            note: payload.note || null,
           });
         }
       } catch (error) {
@@ -484,6 +490,7 @@ export default function MarketDashboardPrototype() {
 
   const statusPill = useMemo(() => {
     if (fxState.status === "ok" && stiborState.status === "ok") return { tone: "good", label: "FX + STIBOR live · øvrige mock" };
+    if (fxState.status === "ok" && stiborState.status === "fallback") return { tone: "warn", label: "FX live · STIBOR siste kjente" };
     if (hasError) return { tone: "bad", label: "Noen kilder fallback · øvrige mock" };
     return { tone: "warn", label: "Henter markedsdata" };
   }, [fxState.status, stiborState.status, hasError]);
@@ -503,11 +510,18 @@ export default function MarketDashboardPrototype() {
       };
     }
 
+    if (stiborState.status === "fallback") {
+      return {
+        title: "STIBOR bruker sist verifiserte verdi",
+        message: `${stiborState.message || "Livehenting fra SFBF feilet."} Viser 3M STIBOR ${formatNumber(stiborState.value, 3)} % fra ${stiborState.date}.`,
+      };
+    }
+
     return {
       title: "1 kilde bør sjekkes",
       message: "Akershus yield er merket som interaktiv kilde. Appen viser forrige lagrede verdi hvis henting feiler.",
     };
-  }, [fxState.status, fxState.message, stiborState.status, stiborState.message]);
+  }, [fxState.status, fxState.message, stiborState.status, stiborState.message, stiborState.value, stiborState.date]);
 
   return (
     <div className="min-h-screen bg-[#f1efeb] text-stone-950">
@@ -568,7 +582,7 @@ export default function MarketDashboardPrototype() {
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
-          <Pill>{fxState.status === "ok" && stiborState.status === "ok" ? "FX/STIBOR live" : "Demo/fallback"}</Pill>
+          <Pill>{fxState.status === "ok" && stiborState.status === "ok" ? "FX/STIBOR live" : stiborState.status === "fallback" ? "STIBOR siste kjente" : "Demo/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">
@@ -605,14 +619,16 @@ export default function MarketDashboardPrototype() {
           <Tile
             title="3M STIBOR"
             source={stiborState.sourceName}
-            value={Number.isFinite(Number(stiborState.value)) ? formatNumber(stiborState.value, 3) : "—"}
+            value={hasNumericValue(stiborState.value) ? formatNumber(stiborState.value, 3) : "—"}
             unit="%"
             subtitle={
               stiborState.status === "ok"
                 ? `Dato: ${stiborState.date || "—"}`
-                : stiborState.status === "loading"
-                  ? "Henter live-verdi"
-                  : "Fallback-verdi"
+                : stiborState.status === "fallback"
+                  ? `Siste verifiserte: ${stiborState.date || "—"}`
+                  : stiborState.status === "loading"
+                    ? "Henter live-verdi"
+                    : "Ingen verdi"
             }
             accent="cyan"
             icon={<CircleDollarSign size={17} />}
@@ -661,7 +677,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta og 3M STIBOR hentes nå live via Vercel API-funksjoner. STIBOR hentes direkte fra SFBF. Øvrige nøkkeltall er fortsatt mock-data.
+          Valuta hentes live fra Norges Bank. STIBOR hentes fra SFBF; hvis livehenting blokkeres, vises sist verifiserte SFBF-verdi. Øvrige nøkkeltall er fortsatt mock-data.
         </footer>
       </div>
 

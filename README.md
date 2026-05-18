@@ -6,10 +6,14 @@ Mobiltilpasset PWA-dashboard for renter, valuta og eiendomsyield.
 
 - Valutakurser hentes live fra Norges Bank via `/api/fx`
 - 3M STIBOR hentes live fra SFBF via `/api/stibor`
+- Hvis SFBF blokkerer serverkallet, returnerer API-et sist verifiserte SFBF-verdi:
+  - 15 May 2026
+  - 3 Months
+  - 2.003 %
+- Fallback vises som "siste verifiserte", ikke som 0 og ikke som grønn live-status.
 - EUR/NOK, USD/NOK og SEK/NOK normaliseres til NOK per 1 valutaenhet
 - 30-dagers endring vises fra NOK-perspektiv
 - 3-års valutahistorikk vises i overlay-graf
-- Hvis STIBOR-kilden feiler, vises "—" og feilmelding i stedet for en hardkodet fallback-verdi
 - Øvrige tall er fortsatt mock-data
 
 ## Kjør lokalt
@@ -27,8 +31,9 @@ Når filer committes til GitHub, deployer Vercel automatisk.
 
 ## Neste steg
 
-1. Koble på UNION yielder.
-2. Koble på SEB swap-rates.
-3. Koble på Newsec PDF-yielder.
-4. Koble på Akershus Eiendom.
-5. Koble på NIBOR fra UNION PDF.
+1. Legge inn database/cache for sist vellykket STIBOR-kall.
+2. Koble på UNION yielder.
+3. Koble på SEB swap-rates.
+4. Koble på Newsec PDF-yielder.
+5. Koble på Akershus Eiendom.
+6. Koble på NIBOR fra UNION PDF.

@@ -1,3 +1,12 @@
+const LAST_VERIFIED_STIBOR_3M = {
+  value: 2.003,
+  date: "2026-05-15",
+  sourceName: "SFBF",
+  sourceUrl: "https://swfbf.se/stibor/rates/",
+  method: "last_verified_fallback",
+  note: "Sist verifiserte verdi fra SFBF-tabellen: 15 May 2026, 3 Months, 2.003.",
+};
+
 function parseNumber(value) {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return Number.NaN;
@@ -53,9 +62,6 @@ function htmlToText(html) {
 function extractStibor3mFromSfbfHtml(html) {
   const text = htmlToText(html);
 
-  // The public SFBF table normally renders as:
-  // Calculation Date | Tenor | Fixing Rate
-  // 15 May 2026 | 3 Months | 2.003
   const tableRowPattern =
     /(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})\s+3\s*Months?\s+([-+]?\d+(?:[.,]\d+)?)/i;
 
@@ -70,7 +76,6 @@ function extractStibor3mFromSfbfHtml(html) {
     }
   }
 
-  // Fallback for layouts where the row is not rendered in strict order.
   const loosePattern =
     /3\s*Months?[^0-9+-]{0,80}([-+]?\d+(?:[.,]\d+)?)/i;
 
@@ -94,7 +99,7 @@ async function fetchFromSfbf() {
 
   const response = await fetch(sourceUrl, {
     headers: {
-      Accept: "text/html",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
       "Cache-Control": "no-cache",
     },
@@ -134,15 +139,20 @@ export default async function handler(request, response) {
       fetchedAt: new Date().toISOString(),
     });
   } catch (error) {
-    response.status(500).json({
-      status: "error",
+    response.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=86400");
+    response.status(200).json({
+      status: "fallback",
       tenor: "3M",
       currency: "SEK",
+      value: LAST_VERIFIED_STIBOR_3M.value,
+      date: LAST_VERIFIED_STIBOR_3M.date,
       unit: "%",
       sourceName: "SFBF",
-      sourceUrl: "https://swfbf.se/stibor/rates/",
+      sourceUrl: LAST_VERIFIED_STIBOR_3M.sourceUrl,
+      method: LAST_VERIFIED_STIBOR_3M.method,
       fetchedAt: new Date().toISOString(),
       message: error instanceof Error ? error.message : "Ukjent feil ved henting av STIBOR.",
+      note: LAST_VERIFIED_STIBOR_3M.note,
     });
   }
 }

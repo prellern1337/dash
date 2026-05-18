@@ -12,7 +12,9 @@
     "framer-motion": "latest",
     "lucide-react": "latest",
     "recharts": "latest",
-    "pdf-parse": "1.1.1"
+    "pdf-parse": "1.1.1",
+    "playwright-core": "1.45.3",
+    "@sparticuz/chromium": "126.0.0"
   },
   "devDependencies": {
     "tailwindcss": "3.4.17",

@@ -4,5 +4,10 @@
       "path": "/api/yields",
       "schedule": "30 13 * * 3"
     }
-  ]
+  ],
+  "functions": {
+    "api/yields.js": {
+      "maxDuration": 60
+    }
+  }
 }

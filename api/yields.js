@@ -16,6 +16,18 @@ const NEWSEC_LAST_VERIFIED = {
   values: { office: 4.50, retail: 5.25, logistics: 5.25 },
 };
 
+const AKERSHUS_URL = "https://akershuseiendom.no/markedsinnsikt/nokkeltall";
+
+const AKERSHUS_LAST_VERIFIED = {
+  period: "Per mai 2026",
+  sourceUrl: AKERSHUS_URL,
+  values: {
+    office: 4.50,
+    retail: 4.50,
+    logistics: 5.25,
+  },
+};
+
 function parseNumber(value) {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return Number.NaN;
@@ -205,6 +217,145 @@ async function fetchNewsecYields() {
   }
 }
 
+function buildAkershusFromLastVerified(reason = null) {
+  const data = {};
+
+  for (const segment of UNION_SEGMENTS) {
+    data[segment.id] = {
+      id: segment.id,
+      label: segment.label,
+      source: "Akershus",
+      sourceUrl: AKERSHUS_LAST_VERIFIED.sourceUrl,
+      value: AKERSHUS_LAST_VERIFIED.values[segment.id],
+      period: AKERSHUS_LAST_VERIFIED.period,
+      status: "last_verified",
+      message: reason,
+    };
+  }
+
+  return data;
+}
+
+function extractAkershusSegmentValue(pageText, segmentId) {
+  const segmentText = pageText.includes("Segmentoversikt")
+    ? pageText.split("Segmentoversikt").slice(1).join("Segmentoversikt")
+    : pageText;
+
+  const patterns = {
+    office: /Prime\s+yield(?:\s+Oslo)?\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
+    retail: /Prime\s+yield\s+high\s+street\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
+    logistics: /Prime\s+yield\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
+  };
+
+  const match = segmentText.match(patterns[segmentId]);
+  if (!match) {
+    throw new Error(`Fant ikke Prime yield for Akershus ${segmentId}.`);
+  }
+
+  const value = parseNumber(match[1]);
+  if (!Number.isFinite(value)) {
+    throw new Error(`Kunne ikke tolke Akershus-verdi for ${segmentId}.`);
+  }
+
+  return value;
+}
+
+async function clickAkershusSegment(page, label) {
+  const roleLocator = page.getByRole("button", { name: label, exact: true });
+  if (await roleLocator.count()) {
+    await roleLocator.first().click();
+    await page.waitForTimeout(900);
+    return;
+  }
+
+  const textLocator = page.locator(`text=${label}`).first();
+  await textLocator.click();
+  await page.waitForTimeout(900);
+}
+
+async function fetchAkershusYieldsLive() {
+  const chromiumModule = await import("@sparticuz/chromium");
+  const chromium = chromiumModule.default || chromiumModule;
+  const playwrightModule = await import("playwright-core");
+
+  const browser = await playwrightModule.chromium.launch({
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+
+  try {
+    const page = await browser.newPage({
+      viewport: { width: 1440, height: 1100 },
+      userAgent: "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+    });
+
+    await page.goto(AKERSHUS_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+    await page.waitForTimeout(3500);
+
+    const data = {};
+
+    await clickAkershusSegment(page, "Kontor");
+    let text = await page.locator("body").innerText({ timeout: 10000 });
+    data.office = {
+      id: "office",
+      label: "Kontor",
+      source: "Akershus",
+      sourceUrl: AKERSHUS_URL,
+      value: extractAkershusSegmentValue(text, "office"),
+      period: "Per mai 2026",
+      status: "ok",
+    };
+
+    await clickAkershusSegment(page, "Handel");
+    text = await page.locator("body").innerText({ timeout: 10000 });
+    data.retail = {
+      id: "retail",
+      label: "Handel",
+      source: "Akershus",
+      sourceUrl: AKERSHUS_URL,
+      value: extractAkershusSegmentValue(text, "retail"),
+      period: "Per mai 2026",
+      status: "ok",
+    };
+
+    await clickAkershusSegment(page, "Logistikk");
+    text = await page.locator("body").innerText({ timeout: 10000 });
+    data.logistics = {
+      id: "logistics",
+      label: "Logistikk",
+      source: "Akershus",
+      sourceUrl: AKERSHUS_URL,
+      value: extractAkershusSegmentValue(text, "logistics"),
+      period: "Per mai 2026",
+      status: "ok",
+    };
+
+    return data;
+  } finally {
+    await browser.close();
+  }
+}
+
+async function fetchAkershusYields() {
+  try {
+    return {
+      data: await fetchAkershusYieldsLive(),
+      errors: [],
+    };
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+
+    return {
+      data: buildAkershusFromLastVerified(reason),
+      errors: [`Akershus livehenting feilet. Viser sist verifiserte verdier fra skjermbilder per mai 2026. Teknisk feil: ${reason}`],
+    };
+  }
+}
+
 function emptySource(segment, source, status = "error", sourceUrl = null) {
   return { id: segment.id, label: segment.label, source, sourceUrl, value: null, period: null, status };
 }
@@ -265,7 +416,17 @@ export default async function handler(request, response) {
       for (const segment of UNION_SEGMENTS) newsecData[segment.id] = emptySource(segment, "Newsec", "error");
     }
 
-    const data = buildSegmentPayload(unionData, newsecData);
+    let akershusData = {};
+    try {
+      const akershusResult = await fetchAkershusYields();
+      akershusData = akershusResult.data;
+      errors.push(...akershusResult.errors);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+      akershusData = buildAkershusFromLastVerified(error instanceof Error ? error.message : String(error));
+    }
+
+    const data = buildSegmentPayload(unionData, newsecData, akershusData);
     const hasAnyValue = Object.values(data).some((segment) => Number.isFinite(Number(segment.value)));
 
     if (!hasAnyValue) {
@@ -295,7 +456,7 @@ export default async function handler(request, response) {
       sourceName: "UNION M2 / Newsec",
       fetchedAt,
       message: error instanceof Error ? error.message : "Ukjent feil ved henting av yielder.",
-      data: buildSegmentPayload({}, {}),
+      data: buildSegmentPayload({}, {}, buildAkershusFromLastVerified()),
       errors: [error instanceof Error ? error.message : String(error)],
     });
   }

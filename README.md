@@ -5,12 +5,11 @@ Mobiltilpasset PWA-dashboard for renter, valuta og eiendomsyield.
 ## Status i denne versjonen
 
 - Valutakurser hentes live fra Norges Bank via `/api/fx`
-- 3M STIBOR hentes live via `/api/stibor`
-  - Primærkilde: Riksbankens SWEA API-serie `SEDP3MSTIBORDELAYC`
-  - Fallback: SFBF sin STIBOR-side
+- 3M STIBOR hentes live fra SFBF via `/api/stibor`
 - EUR/NOK, USD/NOK og SEK/NOK normaliseres til NOK per 1 valutaenhet
 - 30-dagers endring vises fra NOK-perspektiv
 - 3-års valutahistorikk vises i overlay-graf
+- Hvis STIBOR-kilden feiler, vises "—" og feilmelding i stedet for en hardkodet fallback-verdi
 - Øvrige tall er fortsatt mock-data
 
 ## Kjør lokalt

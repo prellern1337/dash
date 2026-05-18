@@ -82,8 +82,8 @@ const fallbackStibor = {
   status: "loading",
   sourceName: "SFBF",
   sourceUrl: "https://swfbf.se/stibor/rates/",
-  value: 2.48,
-  date: "mock",
+  value: null,
+  date: null,
   fetchedAt: null,
   message: null,
 };
@@ -499,7 +499,7 @@ export default function MarketDashboardPrototype() {
     if (stiborState.status === "error") {
       return {
         title: "STIBOR-kilde feilet",
-        message: `${stiborState.message} Appen viser midlertidig fallback-verdi for 3M STIBOR.`,
+        message: `${stiborState.message} Appen viser ikke hardkodet STIBOR-verdi når livekilden feiler.`,
       };
     }
 
@@ -605,7 +605,7 @@ export default function MarketDashboardPrototype() {
           <Tile
             title="3M STIBOR"
             source={stiborState.sourceName}
-            value={formatNumber(stiborState.value, 3)}
+            value={Number.isFinite(Number(stiborState.value)) ? formatNumber(stiborState.value, 3) : "—"}
             unit="%"
             subtitle={
               stiborState.status === "ok"
@@ -661,7 +661,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta og 3M STIBOR hentes nå live via Vercel API-funksjoner. Øvrige nøkkeltall er fortsatt mock-data.
+          Valuta og 3M STIBOR hentes nå live via Vercel API-funksjoner. STIBOR hentes direkte fra SFBF. Øvrige nøkkeltall er fortsatt mock-data.
         </footer>
       </div>
 

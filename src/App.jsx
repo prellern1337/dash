@@ -377,6 +377,7 @@ function getYieldSource(segment, sourceName) {
 
 function getSourceStatusLabel(status) {
   if (status === "ok") return "Live";
+  if (status === "last_verified") return "Siste verif.";
   if (status === "loading") return "Henter";
   if (status === "not_connected") return "Ikke koblet";
   return "Feil";
@@ -399,7 +400,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Snittet beregnes av kilder som er koblet og hentet OK. Akershus kobles på senere.
+            Snittet beregnes av live/sist verifiserte kilder. Akershus kobles på senere.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -427,9 +428,12 @@ function YieldOverlay({ onClose, yieldState }) {
           </thead>
           <tbody>
             {rows.map((row) => {
-              const statusLabel = [row.office.status, row.retail.status, row.logistics.status].includes("ok")
+              const statuses = [row.office.status, row.retail.status, row.logistics.status];
+              const statusLabel = statuses.includes("ok")
                 ? "Live"
-                : getSourceStatusLabel(row.office.status);
+                : statuses.includes("last_verified")
+                  ? "Siste verif."
+                  : getSourceStatusLabel(row.office.status);
 
               return (
                 <tr key={row.source} className="border-t border-stone-100">
@@ -545,7 +549,14 @@ export default function MarketDashboardPrototype() {
     async function loadYields() {
       try {
         const response = await fetch("/api/yields");
-        const payload = await response.json();
+        const rawText = await response.text();
+
+        let payload;
+        try {
+          payload = JSON.parse(rawText);
+        } catch {
+          throw new Error(`Yield-API returnerte ikke JSON: ${rawText.slice(0, 140)}`);
+        }
 
         if (!response.ok || payload.status === "error") {
           throw new Error(payload.message || "Kunne ikke hente yielder.");

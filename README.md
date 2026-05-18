@@ -38,3 +38,9 @@ SEB swap-rates hentes ved app-lasting via `/api/swaps`.
 - Henter Swap [NOK] og Swap [SEK]
 - Viser 3Y, 5Y og 10Y
 - Endepunktet bruker kort Vercel-cache (`s-maxage=300`) for å unngå unødvendig tung scraping ved mange raske åpninger.
+
+
+## SEB fix
+
+`api/swaps.js` uses `headless: true` explicitly. This avoids the Vercel/Playwright error:
+`browserType.launch: headless: expected boolean, got string`.

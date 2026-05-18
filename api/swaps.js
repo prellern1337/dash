@@ -134,9 +134,10 @@ async function getRenderedSebText() {
   const playwrightModule = await import("playwright-core");
 
   const browser = await playwrightModule.chromium.launch({
+    // Vercel/Playwright expects a boolean here. @sparticuz/chromium.headless can be a string in some versions.
     args: chromium.args,
     executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
+    headless: true,
   });
 
   try {

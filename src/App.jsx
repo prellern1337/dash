@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -24,52 +24,68 @@ import {
   CartesianGrid,
 } from "recharts";
 
-const fxSeries = {
+const fallbackFxSeries = {
   "EUR/NOK": [
-    { date: "2023", value: 10.85 },
-    { date: "Q2", value: 11.18 },
-    { date: "Q3", value: 11.42 },
-    { date: "Q4", value: 11.31 },
-    { date: "2024", value: 11.26 },
-    { date: "Q2", value: 11.58 },
-    { date: "Q3", value: 11.72 },
-    { date: "Q4", value: 11.64 },
-    { date: "2025", value: 11.43 },
-    { date: "Q2", value: 11.71 },
-    { date: "Q3", value: 11.82 },
-    { date: "Q4", value: 11.66 },
-    { date: "2026", value: 11.53 },
+    { date: "2023-05-18", value: 10.85 },
+    { date: "2023-08-18", value: 11.18 },
+    { date: "2023-11-18", value: 11.42 },
+    { date: "2024-02-18", value: 11.31 },
+    { date: "2024-05-18", value: 11.26 },
+    { date: "2024-08-18", value: 11.58 },
+    { date: "2024-11-18", value: 11.72 },
+    { date: "2025-02-18", value: 11.64 },
+    { date: "2025-05-18", value: 11.43 },
+    { date: "2025-08-18", value: 11.71 },
+    { date: "2025-11-18", value: 11.82 },
+    { date: "2026-02-18", value: 11.66 },
+    { date: "2026-05-18", value: 11.53 },
   ],
   "USD/NOK": [
-    { date: "2023", value: 10.12 },
-    { date: "Q2", value: 10.61 },
-    { date: "Q3", value: 10.89 },
-    { date: "Q4", value: 10.41 },
-    { date: "2024", value: 10.36 },
-    { date: "Q2", value: 10.79 },
-    { date: "Q3", value: 10.95 },
-    { date: "Q4", value: 11.12 },
-    { date: "2025", value: 11.06 },
-    { date: "Q2", value: 10.87 },
-    { date: "Q3", value: 10.65 },
-    { date: "Q4", value: 10.51 },
-    { date: "2026", value: 10.38 },
+    { date: "2023-05-18", value: 10.12 },
+    { date: "2023-08-18", value: 10.61 },
+    { date: "2023-11-18", value: 10.89 },
+    { date: "2024-02-18", value: 10.41 },
+    { date: "2024-05-18", value: 10.36 },
+    { date: "2024-08-18", value: 10.79 },
+    { date: "2024-11-18", value: 10.95 },
+    { date: "2025-02-18", value: 11.12 },
+    { date: "2025-05-18", value: 11.06 },
+    { date: "2025-08-18", value: 10.87 },
+    { date: "2025-11-18", value: 10.65 },
+    { date: "2026-02-18", value: 10.51 },
+    { date: "2026-05-18", value: 10.38 },
   ],
   "SEK/NOK": [
-    { date: "2023", value: 0.94 },
-    { date: "Q2", value: 0.96 },
-    { date: "Q3", value: 0.98 },
-    { date: "Q4", value: 0.99 },
-    { date: "2024", value: 1.01 },
-    { date: "Q2", value: 1.0 },
-    { date: "Q3", value: 0.99 },
-    { date: "Q4", value: 0.98 },
-    { date: "2025", value: 0.97 },
-    { date: "Q2", value: 0.96 },
-    { date: "Q3", value: 0.95 },
-    { date: "Q4", value: 0.96 },
-    { date: "2026", value: 0.97 },
+    { date: "2023-05-18", value: 0.94 },
+    { date: "2023-08-18", value: 0.96 },
+    { date: "2023-11-18", value: 0.98 },
+    { date: "2024-02-18", value: 0.99 },
+    { date: "2024-05-18", value: 1.01 },
+    { date: "2024-08-18", value: 1.0 },
+    { date: "2024-11-18", value: 0.99 },
+    { date: "2025-02-18", value: 0.98 },
+    { date: "2025-05-18", value: 0.97 },
+    { date: "2025-08-18", value: 0.96 },
+    { date: "2025-11-18", value: 0.95 },
+    { date: "2026-02-18", value: 0.96 },
+    { date: "2026-05-18", value: 0.97 },
   ],
+};
+
+const fallbackFxPairs = [
+  { name: "EUR/NOK", value: 11.53, change30dNok: 1.2, date: "mock", series3y: fallbackFxSeries["EUR/NOK"] },
+  { name: "USD/NOK", value: 10.38, change30dNok: -0.8, date: "mock", series3y: fallbackFxSeries["USD/NOK"] },
+  { name: "SEK/NOK", value: 0.97, change30dNok: 0.4, date: "mock", series3y: fallbackFxSeries["SEK/NOK"] },
+];
+
+const fallbackStibor = {
+  status: "loading",
+  sourceName: "SFBF",
+  sourceUrl: "https://swfbf.se/stibor/rates/",
+  value: 2.48,
+  date: "mock",
+  fetchedAt: null,
+  message: null,
 };
 
 const yieldRows = [
@@ -88,7 +104,35 @@ const yieldAverage = yieldRows.reduce(
 );
 
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
-const formatNumber = (value, decimals = 2) => value.toFixed(decimals).replace(".", ",");
+const formatNumber = (value, decimals = 2) => Number(value).toFixed(decimals).replace(".", ",");
+
+function getFxDecimals(pairName) {
+  return pairName === "SEK/NOK" ? 3 : 2;
+}
+
+function formatDateTimeShort(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("no-NO", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatChartDate(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("no-NO", {
+    month: "2-digit",
+    year: "2-digit",
+  }).format(date);
+}
 
 function Pill({ children, tone = "neutral" }) {
   const classes = {
@@ -224,17 +268,24 @@ function Overlay({ title, children, onClose, footer }) {
 }
 
 function FxOverlay({ pair, onClose }) {
-  const data = fxSeries[pair.name];
-  const min = Math.min(...data.map((d) => d.value));
-  const max = Math.max(...data.map((d) => d.value));
+  const data = pair.series3y || fallbackFxSeries[pair.name] || [];
+  const values = data.map((d) => d.value).filter((value) => Number.isFinite(value));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
   const padding = (max - min) * 0.15 || 0.1;
+  const decimals = getFxDecimals(pair.name);
 
   return (
     <Overlay
       title={pair.name}
       onClose={onClose}
       footer={
-        <a className="flex items-center justify-between text-sm font-medium text-stone-700" href="#">
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={pair.sourceUrl || "https://www.norges-bank.no/tema/Statistikk/Valutakurser/"}
+          target="_blank"
+          rel="noreferrer"
+        >
           Åpne kilde hos Norges Bank
           <ExternalLink size={16} />
         </a>
@@ -243,11 +294,12 @@ function FxOverlay({ pair, onClose }) {
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl bg-stone-50 p-3">
           <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Siste kurs</div>
-          <div className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-stone-950">{pair.value}</div>
+          <div className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-stone-950">{formatNumber(pair.value, decimals)}</div>
+          <div className="mt-1 text-[11px] text-stone-400">Dato: {pair.date || "—"}</div>
         </div>
         <div className="rounded-2xl bg-stone-50 p-3">
           <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">30 dager</div>
-          <FxChange change={pair.change} />
+          <FxChange change={pair.change30dNok} />
         </div>
       </div>
       <div className="h-60 rounded-3xl bg-stone-50 p-3">
@@ -259,6 +311,9 @@ function FxOverlay({ pair, onClose }) {
               tick={{ fontSize: 10, fill: "#78716c" }}
               tickLine={false}
               axisLine={false}
+              minTickGap={28}
+              interval="preserveStartEnd"
+              tickFormatter={formatChartDate}
             />
             <YAxis
               domain={[min - padding, max + padding]}
@@ -267,11 +322,12 @@ function FxOverlay({ pair, onClose }) {
               axisLine={false}
               width={58}
               tickMargin={8}
-              tickFormatter={(value) => formatNumber(value, pair.name === "SEK/NOK" ? 3 : 2)}
+              tickFormatter={(value) => formatNumber(value, decimals)}
             />
             <Tooltip
               contentStyle={{ borderRadius: 16, border: "0", boxShadow: "0 14px 40px rgba(0,0,0,0.12)" }}
-              formatter={(value) => [formatNumber(value, pair.name === "SEK/NOK" ? 3 : 2), pair.name]}
+              formatter={(value) => [formatNumber(value, decimals), pair.name]}
+              labelFormatter={(value) => `Dato: ${value}`}
             />
             <Line type="monotone" dataKey="value" stroke="currentColor" strokeWidth={3} dot={false} className="text-stone-900" />
           </LineChart>
@@ -329,15 +385,129 @@ export default function MarketDashboardPrototype() {
   const [selectedFx, setSelectedFx] = useState(null);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
+  const [fxState, setFxState] = useState({
+    status: "loading",
+    fetchedAt: null,
+    sourceName: "Norges Bank",
+    sourceUrl: "https://www.norges-bank.no/tema/Statistikk/Valutakurser/",
+    pairs: fallbackFxPairs,
+    message: null,
+  });
+  const [stiborState, setStiborState] = useState(fallbackStibor);
 
-  const fxTiles = useMemo(
-    () => [
-      { name: "EUR/NOK", value: "11,53", change: 1.2, decimals: 2 },
-      { name: "USD/NOK", value: "10,38", change: -0.8, decimals: 2 },
-      { name: "SEK/NOK", value: "0,97", change: 0.4, decimals: 3 },
-    ],
-    []
-  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFx() {
+      try {
+        const response = await fetch("/api/fx");
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente valutakurser.");
+        }
+
+        if (!cancelled) {
+          setFxState({
+            status: "ok",
+            fetchedAt: payload.fetchedAt,
+            sourceName: payload.sourceName || "Norges Bank",
+            sourceUrl: payload.sourceUrl,
+            pairs: payload.pairs.map((pair) => ({
+              ...pair,
+              sourceUrl: payload.sourceUrl,
+            })),
+            message: null,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setFxState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente valutakurser.",
+          }));
+        }
+      }
+    }
+
+    async function loadStibor() {
+      try {
+        const response = await fetch("/api/stibor");
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente 3M STIBOR.");
+        }
+
+        if (!cancelled) {
+          setStiborState({
+            status: "ok",
+            sourceName: payload.sourceName || "SFBF",
+            sourceUrl: payload.sourceUrl || "https://swfbf.se/stibor/rates/",
+            value: payload.value,
+            date: payload.date,
+            fetchedAt: payload.fetchedAt,
+            message: null,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStiborState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente 3M STIBOR.",
+          }));
+        }
+      }
+    }
+
+    loadFx();
+    loadStibor();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const latestFetchedAt = useMemo(() => {
+    const dates = [fxState.fetchedAt, stiborState.fetchedAt]
+      .filter(Boolean)
+      .map((value) => new Date(value))
+      .filter((date) => !Number.isNaN(date.getTime()))
+      .sort((a, b) => b.getTime() - a.getTime());
+
+    return dates[0]?.toISOString() || null;
+  }, [fxState.fetchedAt, stiborState.fetchedAt]);
+
+  const hasError = fxState.status === "error" || stiborState.status === "error";
+
+  const statusPill = useMemo(() => {
+    if (fxState.status === "ok" && stiborState.status === "ok") return { tone: "good", label: "FX + STIBOR live · øvrige mock" };
+    if (hasError) return { tone: "bad", label: "Noen kilder fallback · øvrige mock" };
+    return { tone: "warn", label: "Henter markedsdata" };
+  }, [fxState.status, stiborState.status, hasError]);
+
+  const warningContent = useMemo(() => {
+    if (fxState.status === "error") {
+      return {
+        title: "Valutakilde feilet",
+        message: `${fxState.message} Appen viser midlertidig mock-data for valuta.`,
+      };
+    }
+
+    if (stiborState.status === "error") {
+      return {
+        title: "STIBOR-kilde feilet",
+        message: `${stiborState.message} Appen viser midlertidig fallback-verdi for 3M STIBOR.`,
+      };
+    }
+
+    return {
+      title: "1 kilde bør sjekkes",
+      message: "Akershus yield er merket som interaktiv kilde. Appen viser forrige lagrede verdi hvis henting feiler.",
+    };
+  }, [fxState.status, fxState.message, stiborState.status, stiborState.message]);
 
   return (
     <div className="min-h-screen bg-[#f1efeb] text-stone-950">
@@ -348,7 +518,7 @@ export default function MarketDashboardPrototype() {
               <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-stone-950 text-white">
                 <BarChart3 size={17} />
               </span>
-              <Pill tone="good">MVP prototype</Pill>
+              <Pill tone={statusPill.tone}>{statusPill.label}</Pill>
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.06em] text-stone-950">Marked</h1>
             <p className="mt-1 text-sm leading-snug text-stone-500">Renter, valuta og prime yield samlet i én mobilvisning.</p>
@@ -357,7 +527,7 @@ export default function MarketDashboardPrototype() {
             <div className="flex items-center justify-end gap-1 text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">
               <Clock3 size={12} /> Sjekket
             </div>
-            <div className="mt-1 text-xs font-semibold text-stone-700">18.05 · 09:05</div>
+            <div className="mt-1 text-xs font-semibold text-stone-700">{formatDateTimeShort(latestFetchedAt) || "—"}</div>
           </div>
         </header>
 
@@ -367,17 +537,21 @@ export default function MarketDashboardPrototype() {
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className="mb-4 rounded-[1.4rem] bg-white p-3 shadow-sm ring-1 ring-amber-200/70"
+              className={`mb-4 rounded-[1.4rem] bg-white p-3 shadow-sm ring-1 ${
+                hasError ? "ring-rose-200/80" : "ring-amber-200/70"
+              }`}
             >
               <div className="flex gap-3">
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-700">
+                <div
+                  className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-2xl ${
+                    hasError ? "bg-rose-50 text-rose-700" : "bg-amber-50 text-amber-700"
+                  }`}
+                >
                   <AlertTriangle size={16} />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-stone-900">1 kilde bør sjekkes</div>
-                  <p className="mt-0.5 text-xs leading-snug text-stone-500">
-                    Akershus yield er merket som interaktiv kilde. Appen viser forrige lagrede verdi hvis henting feiler.
-                  </p>
+                  <div className="text-sm font-semibold text-stone-900">{warningContent.title}</div>
+                  <p className="mt-0.5 text-xs leading-snug text-stone-500">{warningContent.message}</p>
                 </div>
                 <button
                   type="button"
@@ -394,7 +568,7 @@ export default function MarketDashboardPrototype() {
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
-          <Pill>Alle tall er mock-data</Pill>
+          <Pill>{fxState.status === "ok" && stiborState.status === "ok" ? "FX/STIBOR live" : "Demo/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">
@@ -430,25 +604,32 @@ export default function MarketDashboardPrototype() {
 
           <Tile
             title="3M STIBOR"
-            source="SFBF"
-            value="2,48"
+            source={stiborState.sourceName}
+            value={formatNumber(stiborState.value, 3)}
             unit="%"
-            subtitle="Siste daglige fixing"
+            subtitle={
+              stiborState.status === "ok"
+                ? `Dato: ${stiborState.date || "—"}`
+                : stiborState.status === "loading"
+                  ? "Henter live-verdi"
+                  : "Fallback-verdi"
+            }
             accent="cyan"
             icon={<CircleDollarSign size={17} />}
           />
 
-          {fxTiles.map((pair, index) => (
+          {fxState.pairs.map((pair, index) => (
             <Tile
               key={pair.name}
               title={pair.name}
               source="Norges Bank"
-              value={pair.value}
+              value={formatNumber(pair.value, getFxDecimals(pair.name))}
               accent={index === 0 ? "emerald" : index === 1 ? "rose" : "blue"}
               icon={<LineChartIcon size={17} />}
               onClick={() => setSelectedFx(pair)}
             >
-              <FxChange change={pair.change} />
+              <FxChange change={pair.change30dNok} />
+              {pair.date && pair.date !== "mock" && <div className="mt-1 text-[10px] text-stone-400">Dato: {pair.date}</div>}
             </Tile>
           ))}
 
@@ -480,7 +661,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Datakilder bør caches i backend. Hver tile får egen kilde-status, datodato og fallback til sist vellykkede verdi.
+          Valuta og 3M STIBOR hentes nå live via Vercel API-funksjoner. Øvrige nøkkeltall er fortsatt mock-data.
         </footer>
       </div>
 

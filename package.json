@@ -11,7 +11,8 @@
     "react-dom": "latest",
     "framer-motion": "latest",
     "lucide-react": "latest",
-    "recharts": "latest"
+    "recharts": "latest",
+    "pdf-parse": "1.1.1"
   },
   "devDependencies": {
     "tailwindcss": "3.4.17",

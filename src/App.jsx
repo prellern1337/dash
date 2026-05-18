@@ -91,7 +91,7 @@ const fallbackStibor = {
 
 const fallbackYieldState = {
   status: "loading",
-  sourceName: "UNION M2",
+  sourceName: "UNION M2 / Newsec",
   fetchedAt: null,
   message: null,
   data: {
@@ -99,28 +99,31 @@ const fallbackYieldState = {
       id: "office",
       label: "Kontor",
       value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/kontor",
-      status: "loading",
+      sources: [
+        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/kontor" },
+        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
+        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
+      ],
     },
     retail: {
       id: "retail",
       label: "Handel",
       value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/handel",
-      status: "loading",
+      sources: [
+        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/handel" },
+        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
+        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
+      ],
     },
     logistics: {
       id: "logistics",
       label: "Logistikk",
       value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/logistikk",
-      status: "loading",
+      sources: [
+        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/logistikk" },
+        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
+        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
+      ],
     },
   },
 };
@@ -368,30 +371,26 @@ function FxOverlay({ pair, onClose }) {
   );
 }
 
+function getYieldSource(segment, sourceName) {
+  return segment?.sources?.find((source) => source.source === sourceName) || { value: null, status: "not_connected" };
+}
+
+function getSourceStatusLabel(status) {
+  if (status === "ok") return "Live";
+  if (status === "loading") return "Henter";
+  if (status === "not_connected") return "Ikke koblet";
+  return "Feil";
+}
+
 function YieldOverlay({ onClose, yieldState }) {
-  const rows = [
-    {
-      source: "UNION",
-      status: yieldState.status === "loading" ? "Henter" : yieldState.status === "error" ? "Feil" : "Live",
-      office: yieldState.data.office,
-      retail: yieldState.data.retail,
-      logistics: yieldState.data.logistics,
-    },
-    {
-      source: "Newsec",
-      status: "Ikke koblet",
-      office: { value: null },
-      retail: { value: null },
-      logistics: { value: null },
-    },
-    {
-      source: "Akershus",
-      status: "Ikke koblet",
-      office: { value: null },
-      retail: { value: null },
-      logistics: { value: null },
-    },
-  ];
+  const sourceNames = ["UNION", "Newsec", "Akershus"];
+
+  const rows = sourceNames.map((sourceName) => ({
+    source: sourceName,
+    office: getYieldSource(yieldState.data.office, sourceName),
+    retail: getYieldSource(yieldState.data.retail, sourceName),
+    logistics: getYieldSource(yieldState.data.logistics, sourceName),
+  }));
 
   return (
     <Overlay
@@ -400,7 +399,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            UNION M2 hentes live. Newsec og Akershus kobles på senere.
+            Snittet beregnes av kilder som er koblet og hentet OK. Akershus kobles på senere.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -408,12 +407,12 @@ function YieldOverlay({ onClose, yieldState }) {
     >
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
-          ? `Sist hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
+          ? `Sist hentet fra UNION/Newsec: ${formatDateTimeShort(yieldState.fetchedAt)}`
           : yieldState.status === "partial"
-            ? `Delvis hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
+            ? `Delvis hentet: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.message || ""}`
             : yieldState.status === "loading"
-              ? "Henter UNION M2-yielder..."
-              : `Kunne ikke hente UNION M2: ${yieldState.message || "Ukjent feil"}`}
+              ? "Henter yielder fra UNION M2 og Newsec..."
+              : `Kunne ikke hente yielder: ${yieldState.message || "Ukjent feil"}`}
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-stone-100">
@@ -427,17 +426,32 @@ function YieldOverlay({ onClose, yieldState }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
-              <tr key={row.source} className="border-t border-stone-100">
-                <td className="px-3 py-3">
-                  <div className="font-medium text-stone-800">{row.source}</div>
-                  <div className="mt-0.5 text-[10px] text-stone-400">{row.status}</div>
-                </td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office.value)}</td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail.value)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics.value)}</td>
-              </tr>
-            ))}
+            {rows.map((row) => {
+              const statusLabel = [row.office.status, row.retail.status, row.logistics.status].includes("ok")
+                ? "Live"
+                : getSourceStatusLabel(row.office.status);
+
+              return (
+                <tr key={row.source} className="border-t border-stone-100">
+                  <td className="px-3 py-3">
+                    <div className="font-medium text-stone-800">{row.source}</div>
+                    <div className="mt-0.5 text-[10px] text-stone-400">{statusLabel}</div>
+                  </td>
+                  <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office.value)}</td>
+                  <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail.value)}</td>
+                  <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics.value)}</td>
+                </tr>
+              );
+            })}
+            <tr className="border-t border-stone-200 bg-stone-50 font-semibold">
+              <td className="px-3 py-3 text-stone-950">
+                <div>Snitt</div>
+                <div className="mt-0.5 text-[10px] font-normal text-stone-400">Koblede kilder</div>
+              </td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.office.value)}</td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.retail.value)}</td>
+              <td className="px-3 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.logistics.value)}</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -534,13 +548,13 @@ export default function MarketDashboardPrototype() {
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
-          throw new Error(payload.message || "Kunne ikke hente UNION M2-yielder.");
+          throw new Error(payload.message || "Kunne ikke hente yielder.");
         }
 
         if (!cancelled) {
           setYieldState({
             status: payload.status === "partial" ? "partial" : "ok",
-            sourceName: payload.sourceName || "UNION M2",
+            sourceName: payload.sourceName || "UNION M2 / Newsec",
             fetchedAt: payload.fetchedAt,
             message: payload.errors?.length ? payload.errors.join(" | ") : null,
             data: payload.data || fallbackYieldState.data,
@@ -551,7 +565,7 @@ export default function MarketDashboardPrototype() {
           setYieldState((current) => ({
             ...current,
             status: "error",
-            message: error instanceof Error ? error.message : "Kunne ikke hente UNION M2-yielder.",
+            message: error instanceof Error ? error.message : "Kunne ikke hente yielder.",
           }));
         }
       }
@@ -580,13 +594,13 @@ export default function MarketDashboardPrototype() {
 
   const statusPill = useMemo(() => {
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "FX + STIBOR + UNION live" };
+      return { tone: "good", label: "FX + STIBOR + yield live" };
     }
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "partial") {
-      return { tone: "warn", label: "FX/STIBOR live · UNION delvis" };
+      return { tone: "warn", label: "FX/STIBOR live · yield delvis" };
     }
     if (fxState.status === "ok" && stiborState.status === "fallback" && yieldState.status === "ok") {
-      return { tone: "warn", label: "FX + UNION live · STIBOR siste kjente" };
+      return { tone: "warn", label: "FX + yield live · STIBOR siste kjente" };
     }
     if (hasError) return { tone: "bad", label: "Noen kilder feilet" };
     return { tone: "warn", label: "Henter markedsdata" };
@@ -609,8 +623,8 @@ export default function MarketDashboardPrototype() {
 
     if (yieldState.status === "error") {
       return {
-        title: "UNION M2-kilde feilet",
-        message: `${yieldState.message} Prime yield viser tomme verdier til kilden fungerer igjen.`,
+        title: "Yield-kilde feilet",
+        message: `${yieldState.message} Prime yield viser tomme verdier for kilder som feiler.`,
       };
     }
 
@@ -623,14 +637,14 @@ export default function MarketDashboardPrototype() {
 
     if (yieldState.status === "partial") {
       return {
-        title: "UNION M2 delvis hentet",
+        title: "Yield-kilder delvis hentet",
         message: yieldState.message || "Minst ett segment mangler fra UNION M2. Appen viser segmentene som ble hentet.",
       };
     }
 
     return {
       title: "Neste datakilder",
-      message: "Newsec og Akershus Eiendom er ikke koblet på ennå. De vises derfor som tomme i yield-tabellen.",
+      message: "Akershus Eiendom er ikke koblet på ennå. Den vises derfor som tom i yield-tabellen.",
     };
   }, [
     fxState.status,
@@ -702,7 +716,7 @@ export default function MarketDashboardPrototype() {
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
-          <Pill>{yieldState.status === "ok" ? "UNION M2 live" : yieldState.status === "loading" ? "Henter M2" : "Delvis/fallback"}</Pill>
+          <Pill>{yieldState.status === "ok" ? "Yield live" : yieldState.status === "loading" ? "Henter yield" : "Delvis/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">
@@ -771,7 +785,7 @@ export default function MarketDashboardPrototype() {
 
           <Tile
             title="Prime yield"
-            source="UNION M2"
+            source="Snitt"
             accent="slate"
             icon={<Building2 size={17} />}
             onClick={() => setShowYield(true)}
@@ -797,7 +811,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta, 3M STIBOR og UNION M2-yielder hentes live via Vercel API-funksjoner. Newsec, Akershus, SEB swap og 3M NIBOR kobles på senere.
+          Valuta, 3M STIBOR og prime yield fra UNION/Newsec hentes live via Vercel API-funksjoner. Akershus, SEB swap og 3M NIBOR kobles på senere.
         </footer>
       </div>
 

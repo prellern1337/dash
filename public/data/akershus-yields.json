@@ -1,0 +1,38 @@
+{
+  "status": "seed",
+  "sourceName": "Akershus Eiendom",
+  "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+  "fetchedAt": "2026-05-18T00:00:00.000Z",
+  "period": "Per mai 2026",
+  "data": {
+    "office": {
+      "id": "office",
+      "label": "Kontor",
+      "source": "Akershus",
+      "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+      "value": 4.5,
+      "period": "Per mai 2026",
+      "status": "seed"
+    },
+    "retail": {
+      "id": "retail",
+      "label": "Handel",
+      "source": "Akershus",
+      "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+      "value": 4.5,
+      "period": "Per mai 2026",
+      "status": "seed"
+    },
+    "logistics": {
+      "id": "logistics",
+      "label": "Logistikk",
+      "source": "Akershus",
+      "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+      "value": 5.25,
+      "period": "Per mai 2026",
+      "status": "seed"
+    }
+  },
+  "errors": [],
+  "note": "Seedet fra skjermbilder. Overskrives automatisk av GitHub Action når scraperen kjører."
+}

@@ -1,463 +1,79 @@
-const UNION_SEGMENTS = [
-  { id: "office", label: "Kontor", url: "https://m2.union.no/segmenter/kontor" },
-  { id: "retail", label: "Handel", url: "https://m2.union.no/segmenter/handel" },
-  { id: "logistics", label: "Logistikk", url: "https://m2.union.no/segmenter/logistikk" },
-];
+import fs from "node:fs/promises";
+import path from "node:path";
 
-const NEWSEC_ROWS = [
-  { id: "office", label: "Kontor", rowLabel: "Office Oslo CBD", nextRowLabel: "Office Oslo centre" },
-  { id: "retail", label: "Handel", rowLabel: "Retail Prime", nextRowLabel: "Retail Normal" },
-  { id: "logistics", label: "Logistikk", rowLabel: "Logistics Prime", nextRowLabel: "Logistics Normal" },
-];
+const YIELDS_DATA_PATH = path.join(process.cwd(), "public", "data", "yields.json");
 
-const NEWSEC_LAST_VERIFIED = {
-  period: "Q2 2026",
-  sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell",
-  values: { office: 4.50, retail: 5.25, logistics: 5.25 },
-};
-
-const AKERSHUS_URL = "https://akershuseiendom.no/markedsinnsikt/nokkeltall";
-
-const AKERSHUS_LAST_VERIFIED = {
-  period: "Per mai 2026",
-  sourceUrl: AKERSHUS_URL,
-  values: {
-    office: 4.50,
-    retail: 4.50,
-    logistics: 5.25,
-  },
-};
-
-function parseNumber(value) {
-  if (typeof value === "number") return value;
-  if (typeof value !== "string") return Number.NaN;
-  return Number.parseFloat(value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, ""));
-}
-
-function htmlToText(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function periodFromText(value) {
-  if (!value) return null;
-  const match = String(value).match(/\bQ[1-4][-\s]+20\d{2}\b/i);
-  return match ? match[0].toUpperCase().replace("-", " ") : null;
-}
-
-function extractPrimeYield(html) {
-  const text = htmlToText(html);
-  const strictPattern = /Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?\s+Kilde:\s*UNION\s+per\s+([^#]+?)(?=\s+#|\s+Toppleie|\s+Sekundær|\s+Privat|\s+Normal|\s+Våre|\s*$)/i;
-  const strictMatch = text.match(strictPattern);
-  if (strictMatch) {
-    const value = parseNumber(strictMatch[1]);
-    if (Number.isFinite(value)) return { value, period: strictMatch[2].trim().replace(/\.$/, "") };
-  }
-  const looseMatch = text.match(/Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?/i);
-  if (looseMatch) {
-    const value = parseNumber(looseMatch[1]);
-    if (Number.isFinite(value)) return { value, period: null };
-  }
-  throw new Error("Fant ikke Prime yield på UNION M2-siden.");
-}
-
-async function fetchUnionSegment(segment) {
-  const response = await fetch(segment.url, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
-  if (!response.ok) throw new Error(`UNION M2 svarte med ${response.status} for ${segment.label}.`);
-  const html = await response.text();
-  const observation = extractPrimeYield(html);
+function emptySource(id, label, source, sourceUrl = null) {
   return {
-    id: segment.id,
-    label: segment.label,
-    source: "UNION",
-    sourceUrl: segment.url,
-    value: observation.value,
-    period: observation.period,
-    status: "ok",
+    id,
+    label,
+    source,
+    sourceUrl,
+    value: null,
+    period: null,
+    status: "error",
   };
 }
 
-function extractFirstPdfLink(html) {
-  const matches = [...html.matchAll(/href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)];
-  if (matches.length === 0) {
-    const fallback = html.match(/https:\/\/cdn\.sanity\.io\/[^"'\s<>]+\.pdf/);
-    if (fallback) return { url: fallback[0], title: "Newsec yieldtabell" };
-    throw new Error("Fant ingen PDF-lenke på Newsec yieldtabell-siden.");
-  }
-  const first = matches[0];
+function emptyPayload(message = "Fant ikke lagret yield-data.") {
   return {
-    url: first[1].startsWith("http") ? first[1] : `https://www.newsec.no${first[1]}`,
-    title: htmlToText(first[2]) || "Newsec yieldtabell",
-  };
-}
-
-async function getNewsecLatestPdfInfo() {
-  const pageUrl = "https://www.newsec.no/insights/reports/yieldtabell";
-  const pageResponse = await fetch(pageUrl, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
-  if (!pageResponse.ok) throw new Error(`Newsec-siden svarte med ${pageResponse.status}.`);
-  const html = await pageResponse.text();
-  const pdfLink = extractFirstPdfLink(html);
-  return { ...pdfLink, period: periodFromText(pdfLink.title), pageUrl };
-}
-
-function getLatestPeriodFromPdfText(text, fallbackTitle) {
-  const periods = [...text.matchAll(/\bQ[1-4]\s+20\d{2}\b/g)].map((match) => match[0]);
-  if (periods.length) return periods[periods.length - 1];
-  return periodFromText(fallbackTitle);
-}
-
-function extractNewsecLowValue(text, rowLabel, nextRowLabel) {
-  const normalisedText = text.replace(/\r/g, "\n");
-  const lines = normalisedText.split("\n").map((line) => line.trim()).filter(Boolean);
-  let rowText = lines.find((line) => line.toLowerCase().startsWith(rowLabel.toLowerCase()));
-
-  if (!rowText) {
-    const regex = new RegExp(`${escapeRegExp(rowLabel)}\\s+([\\s\\S]*?)(?=${escapeRegExp(nextRowLabel)}|$)`, "i");
-    const match = normalisedText.match(regex);
-    if (match) rowText = `${rowLabel} ${match[1]}`;
-  }
-  if (!rowText) throw new Error(`Fant ikke Newsec-raden "${rowLabel}".`);
-
-  const values = [...rowText.matchAll(/(\d{1,2}[,.]\d{2})\s*%/g)].map((match) => parseNumber(match[1]));
-  if (values.length < 2) throw new Error(`Fant ikke nok yieldverdier for Newsec-raden "${rowLabel}".`);
-  return values[values.length - 2];
-}
-
-function buildNewsecFromLastVerified(pdfInfo, reason) {
-  const data = {};
-  for (const row of NEWSEC_ROWS) {
-    data[row.id] = {
-      id: row.id,
-      label: row.label,
-      source: "Newsec",
-      sourceUrl: pdfInfo?.url || NEWSEC_LAST_VERIFIED.sourceUrl,
-      value: NEWSEC_LAST_VERIFIED.values[row.id],
-      period: NEWSEC_LAST_VERIFIED.period,
-      status: "last_verified",
-      rowLabel: row.rowLabel,
-      message: reason,
-    };
-  }
-  return data;
-}
-
-async function fetchNewsecYields() {
-  const pdfInfo = await getNewsecLatestPdfInfo();
-  const latestPeriod = pdfInfo.period;
-
-  try {
-    const pdfResponse = await fetch(pdfInfo.url, {
-      headers: {
-        Accept: "application/pdf",
-        "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-        "Cache-Control": "no-cache",
+    status: "error",
+    sourceName: "Yield data",
+    fetchedAt: new Date().toISOString(),
+    message,
+    data: {
+      office: {
+        id: "office",
+        label: "Kontor",
+        value: null,
+        sources: [
+          emptySource("office", "Kontor", "UNION", "https://m2.union.no/segmenter/kontor"),
+          emptySource("office", "Kontor", "Newsec", "https://www.newsec.no/insights/reports/yieldtabell"),
+          emptySource("office", "Kontor", "Akershus", "https://akershuseiendom.no/markedsinnsikt/nokkeltall"),
+        ],
       },
-    });
-    if (!pdfResponse.ok) throw new Error(`Newsec-PDF svarte med ${pdfResponse.status}.`);
-
-    const arrayBuffer = await pdfResponse.arrayBuffer();
-    const pdfParseModule = await import("pdf-parse/lib/pdf-parse.js");
-    const pdfParse = pdfParseModule.default || pdfParseModule;
-    const parsed = await pdfParse(Buffer.from(arrayBuffer));
-    const text = parsed.text || "";
-    const period = getLatestPeriodFromPdfText(text, pdfInfo.title) || latestPeriod;
-
-    const data = {};
-    for (const row of NEWSEC_ROWS) {
-      data[row.id] = {
-        id: row.id,
-        label: row.label,
-        source: "Newsec",
-        sourceUrl: pdfInfo.url,
-        value: extractNewsecLowValue(text, row.rowLabel, row.nextRowLabel),
-        period,
-        status: "ok",
-        rowLabel: row.rowLabel,
-      };
-    }
-    return { data, errors: [] };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-
-    if (latestPeriod === NEWSEC_LAST_VERIFIED.period || !latestPeriod) {
-      return {
-        data: buildNewsecFromLastVerified(pdfInfo, reason),
-        errors: [`Newsec PDF-parsing feilet. Viser sist verifiserte verdier for ${NEWSEC_LAST_VERIFIED.period}. Teknisk feil: ${reason}`],
-      };
-    }
-
-    const data = {};
-    for (const row of NEWSEC_ROWS) data[row.id] = emptySource(row, "Newsec", "error", pdfInfo.url);
-    return {
-      data,
-      errors: [`Newsec har ny periode (${latestPeriod}), men PDF-parsing feilet. Oppdater parser/verifiser verdier manuelt. Teknisk feil: ${reason}`],
-    };
-  }
-}
-
-function buildAkershusFromLastVerified(reason = null) {
-  const data = {};
-
-  for (const segment of UNION_SEGMENTS) {
-    data[segment.id] = {
-      id: segment.id,
-      label: segment.label,
-      source: "Akershus",
-      sourceUrl: AKERSHUS_LAST_VERIFIED.sourceUrl,
-      value: AKERSHUS_LAST_VERIFIED.values[segment.id],
-      period: AKERSHUS_LAST_VERIFIED.period,
-      status: "last_verified",
-      message: reason,
-    };
-  }
-
-  return data;
-}
-
-function extractAkershusSegmentValue(pageText, segmentId) {
-  const segmentText = pageText.includes("Segmentoversikt")
-    ? pageText.split("Segmentoversikt").slice(1).join("Segmentoversikt")
-    : pageText;
-
-  const patterns = {
-    office: /Prime\s+yield(?:\s+Oslo)?\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
-    retail: /Prime\s+yield\s+high\s+street\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
-    logistics: /Prime\s+yield\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
+      retail: {
+        id: "retail",
+        label: "Handel",
+        value: null,
+        sources: [
+          emptySource("retail", "Handel", "UNION", "https://m2.union.no/segmenter/handel"),
+          emptySource("retail", "Handel", "Newsec", "https://www.newsec.no/insights/reports/yieldtabell"),
+          emptySource("retail", "Handel", "Akershus", "https://akershuseiendom.no/markedsinnsikt/nokkeltall"),
+        ],
+      },
+      logistics: {
+        id: "logistics",
+        label: "Logistikk",
+        value: null,
+        sources: [
+          emptySource("logistics", "Logistikk", "UNION", "https://m2.union.no/segmenter/logistikk"),
+          emptySource("logistics", "Logistikk", "Newsec", "https://www.newsec.no/insights/reports/yieldtabell"),
+          emptySource("logistics", "Logistikk", "Akershus", "https://akershuseiendom.no/markedsinnsikt/nokkeltall"),
+        ],
+      },
+    },
+    errors: [message],
   };
-
-  const match = segmentText.match(patterns[segmentId]);
-  if (!match) {
-    throw new Error(`Fant ikke Prime yield for Akershus ${segmentId}.`);
-  }
-
-  const value = parseNumber(match[1]);
-  if (!Number.isFinite(value)) {
-    throw new Error(`Kunne ikke tolke Akershus-verdi for ${segmentId}.`);
-  }
-
-  return value;
-}
-
-async function clickAkershusSegment(page, label) {
-  const roleLocator = page.getByRole("button", { name: label, exact: true });
-  if (await roleLocator.count()) {
-    await roleLocator.first().click();
-    await page.waitForTimeout(900);
-    return;
-  }
-
-  const textLocator = page.locator(`text=${label}`).first();
-  await textLocator.click();
-  await page.waitForTimeout(900);
-}
-
-async function fetchAkershusYieldsLive() {
-  const chromiumModule = await import("@sparticuz/chromium");
-  const chromium = chromiumModule.default || chromiumModule;
-  const playwrightModule = await import("playwright-core");
-
-  const browser = await playwrightModule.chromium.launch({
-    args: chromium.args,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-  });
-
-  try {
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 1100 },
-      userAgent: "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-    });
-
-    await page.goto(AKERSHUS_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: 30000,
-    });
-    await page.waitForTimeout(3500);
-
-    const data = {};
-
-    await clickAkershusSegment(page, "Kontor");
-    let text = await page.locator("body").innerText({ timeout: 10000 });
-    data.office = {
-      id: "office",
-      label: "Kontor",
-      source: "Akershus",
-      sourceUrl: AKERSHUS_URL,
-      value: extractAkershusSegmentValue(text, "office"),
-      period: "Per mai 2026",
-      status: "ok",
-    };
-
-    await clickAkershusSegment(page, "Handel");
-    text = await page.locator("body").innerText({ timeout: 10000 });
-    data.retail = {
-      id: "retail",
-      label: "Handel",
-      source: "Akershus",
-      sourceUrl: AKERSHUS_URL,
-      value: extractAkershusSegmentValue(text, "retail"),
-      period: "Per mai 2026",
-      status: "ok",
-    };
-
-    await clickAkershusSegment(page, "Logistikk");
-    text = await page.locator("body").innerText({ timeout: 10000 });
-    data.logistics = {
-      id: "logistics",
-      label: "Logistikk",
-      source: "Akershus",
-      sourceUrl: AKERSHUS_URL,
-      value: extractAkershusSegmentValue(text, "logistics"),
-      period: "Per mai 2026",
-      status: "ok",
-    };
-
-    return data;
-  } finally {
-    await browser.close();
-  }
-}
-
-async function fetchAkershusYields() {
-  try {
-    return {
-      data: await fetchAkershusYieldsLive(),
-      errors: [],
-    };
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-
-    return {
-      data: buildAkershusFromLastVerified(reason),
-      errors: [`Akershus livehenting feilet. Viser sist verifiserte verdier fra skjermbilder per mai 2026. Teknisk feil: ${reason}`],
-    };
-  }
-}
-
-function emptySource(segment, source, status = "error", sourceUrl = null) {
-  return { id: segment.id, label: segment.label, source, sourceUrl, value: null, period: null, status };
-}
-
-function isUsableValue(source) {
-  return ["ok", "last_verified"].includes(source.status) && Number.isFinite(Number(source.value));
-}
-
-function average(values) {
-  const numeric = values.map((value) => Number(value)).filter((value) => Number.isFinite(value));
-  if (!numeric.length) return null;
-  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
-}
-
-function buildSegmentPayload(unionData, newsecData) {
-  const output = {};
-  for (const segment of UNION_SEGMENTS) {
-    const union = unionData[segment.id] ?? emptySource(segment, "UNION", "error", segment.url);
-    const newsec = newsecData[segment.id] ?? emptySource(segment, "Newsec", "error");
-    const akershus = emptySource(segment, "Akershus", "not_connected", "https://akershuseiendom.no/markedsinnsikt/nokkeltall");
-    const sources = [union, newsec, akershus];
-
-    output[segment.id] = {
-      id: segment.id,
-      label: segment.label,
-      value: average(sources.filter(isUsableValue).map((source) => source.value)),
-      sources,
-    };
-  }
-  return output;
 }
 
 export default async function handler(request, response) {
-  const fetchedAt = new Date().toISOString();
-  const errors = [];
-
   try {
-    const unionSettled = await Promise.allSettled(UNION_SEGMENTS.map((segment) => fetchUnionSegment(segment)));
-    const unionData = {};
+    const raw = await fs.readFile(YIELDS_DATA_PATH, "utf8");
+    const payload = JSON.parse(raw);
 
-    unionSettled.forEach((result, index) => {
-      const segment = UNION_SEGMENTS[index];
-      if (result.status === "fulfilled") {
-        unionData[segment.id] = result.value;
-      } else {
-        unionData[segment.id] = emptySource(segment, "UNION", "error", segment.url);
-        errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
-      }
-    });
-
-    let newsecData = {};
-    try {
-      const newsecResult = await fetchNewsecYields();
-      newsecData = newsecResult.data;
-      errors.push(...newsecResult.errors);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-      for (const segment of UNION_SEGMENTS) newsecData[segment.id] = emptySource(segment, "Newsec", "error");
-    }
-
-    let akershusData = {};
-    try {
-      const akershusResult = await fetchAkershusYields();
-      akershusData = akershusResult.data;
-      errors.push(...akershusResult.errors);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-      akershusData = buildAkershusFromLastVerified(error instanceof Error ? error.message : String(error));
-    }
-
-    const data = buildSegmentPayload(unionData, newsecData, akershusData);
-    const hasAnyValue = Object.values(data).some((segment) => Number.isFinite(Number(segment.value)));
-
-    if (!hasAnyValue) {
-      response.status(500).json({
-        status: "error",
-        sourceName: "UNION M2 / Newsec",
-        fetchedAt,
-        message: errors.join(" | ") || "Kunne ikke hente yielder.",
-        data,
-        errors,
-      });
-      return;
-    }
-
-    response.setHeader("Cache-Control", "s-maxage=21600, stale-while-revalidate=604800");
+    response.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=604800");
     response.status(200).json({
-      status: errors.length ? "partial" : "ok",
-      sourceName: "UNION M2 / Newsec",
-      fetchedAt,
-      nextSuggestedUpdate: "Onsdag ettermiddag",
-      data,
-      errors,
+      status: payload.status || "ok",
+      sourceName: payload.sourceName || "Yield data",
+      fetchedAt: payload.fetchedAt || null,
+      lastAttemptAt: payload.lastAttemptAt || null,
+      data: payload.data,
+      errors: payload.errors || [],
+      note: payload.note || null,
     });
   } catch (error) {
-    response.status(500).json({
-      status: "error",
-      sourceName: "UNION M2 / Newsec",
-      fetchedAt,
-      message: error instanceof Error ? error.message : "Ukjent feil ved henting av yielder.",
-      data: buildSegmentPayload({}, {}, buildAkershusFromLastVerified()),
-      errors: [error instanceof Error ? error.message : String(error)],
-    });
+    const message = error instanceof Error ? error.message : "Ukjent feil ved lesing av yield-data.";
+    response.status(500).json(emptyPayload(message));
   }
 }

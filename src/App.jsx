@@ -377,6 +377,9 @@ function getYieldSource(segment, sourceName) {
 
 function getSourceStatusLabel(status) {
   if (status === "ok") return "Live";
+  if (status === "auto") return "Auto";
+  if (status === "stale") return "Forrige auto";
+  if (status === "seed") return "Seed";
   if (status === "last_verified") return "Siste verif.";
   if (status === "loading") return "Henter";
   if (status === "not_connected") return "Ikke koblet";
@@ -400,7 +403,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Snittet beregnes av live/sist verifiserte kilder. Akershus kobles på senere.
+            Snittet beregnes av automatisk oppdatert yield-data. Jobben kjøres omtrent annenhver uke.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -429,11 +432,15 @@ function YieldOverlay({ onClose, yieldState }) {
           <tbody>
             {rows.map((row) => {
               const statuses = [row.office.status, row.retail.status, row.logistics.status];
-              const statusLabel = statuses.includes("ok")
-                ? "Live"
-                : statuses.includes("last_verified")
-                  ? "Siste verif."
-                  : getSourceStatusLabel(row.office.status);
+              const statusLabel = statuses.includes("auto") || statuses.includes("ok")
+                ? "Auto"
+                : statuses.includes("stale")
+                  ? "Forrige auto"
+                  : statuses.includes("seed")
+                    ? "Seed"
+                    : statuses.includes("last_verified")
+                      ? "Siste verif."
+                      : getSourceStatusLabel(row.office.status);
 
               return (
                 <tr key={row.source} className="border-t border-stone-100">
@@ -727,7 +734,7 @@ export default function MarketDashboardPrototype() {
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
-          <Pill>{yieldState.status === "ok" ? "Yield live" : yieldState.status === "loading" ? "Henter yield" : "Delvis/fallback"}</Pill>
+          <Pill>{yieldState.status === "ok" ? "Yield auto" : yieldState.status === "seed" ? "Yield seed" : yieldState.status === "loading" ? "Henter yield" : "Delvis/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">
@@ -822,7 +829,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta, 3M STIBOR og prime yield fra UNION/Newsec hentes live via Vercel API-funksjoner. Akershus, SEB swap og 3M NIBOR kobles på senere.
+          Valuta og 3M STIBOR hentes via API. Yield-data leses fra automatisk oppdatert JSON. SEB swap og 3M NIBOR kobles på senere.
         </footer>
       </div>
 

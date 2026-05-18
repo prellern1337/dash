@@ -1,0 +1,112 @@
+{
+  "status": "seed",
+  "sourceName": "Yield data",
+  "fetchedAt": "2026-05-18T00:00:00.000Z",
+  "lastAttemptAt": null,
+  "data": {
+    "office": {
+      "id": "office",
+      "label": "Kontor",
+      "value": 4.5833,
+      "sources": [
+        {
+          "id": "office",
+          "label": "Kontor",
+          "source": "UNION",
+          "sourceUrl": "https://m2.union.no/segmenter/kontor",
+          "value": 4.75,
+          "period": null,
+          "status": "seed"
+        },
+        {
+          "id": "office",
+          "label": "Kontor",
+          "source": "Newsec",
+          "sourceUrl": "https://www.newsec.no/insights/reports/yieldtabell",
+          "value": 4.5,
+          "period": "Q2 2026",
+          "status": "seed"
+        },
+        {
+          "id": "office",
+          "label": "Kontor",
+          "source": "Akershus",
+          "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+          "value": 4.5,
+          "period": "Per mai 2026",
+          "status": "seed"
+        }
+      ]
+    },
+    "retail": {
+      "id": "retail",
+      "label": "Handel",
+      "value": 4.9167,
+      "sources": [
+        {
+          "id": "retail",
+          "label": "Handel",
+          "source": "UNION",
+          "sourceUrl": "https://m2.union.no/segmenter/handel",
+          "value": 5.0,
+          "period": null,
+          "status": "seed"
+        },
+        {
+          "id": "retail",
+          "label": "Handel",
+          "source": "Newsec",
+          "sourceUrl": "https://www.newsec.no/insights/reports/yieldtabell",
+          "value": 5.25,
+          "period": "Q2 2026",
+          "status": "seed"
+        },
+        {
+          "id": "retail",
+          "label": "Handel",
+          "source": "Akershus",
+          "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+          "value": 4.5,
+          "period": "Per mai 2026",
+          "status": "seed"
+        }
+      ]
+    },
+    "logistics": {
+      "id": "logistics",
+      "label": "Logistikk",
+      "value": 5.25,
+      "sources": [
+        {
+          "id": "logistics",
+          "label": "Logistikk",
+          "source": "UNION",
+          "sourceUrl": "https://m2.union.no/segmenter/logistikk",
+          "value": 5.25,
+          "period": null,
+          "status": "seed"
+        },
+        {
+          "id": "logistics",
+          "label": "Logistikk",
+          "source": "Newsec",
+          "sourceUrl": "https://www.newsec.no/insights/reports/yieldtabell",
+          "value": 5.25,
+          "period": "Q2 2026",
+          "status": "seed"
+        },
+        {
+          "id": "logistics",
+          "label": "Logistikk",
+          "source": "Akershus",
+          "sourceUrl": "https://akershuseiendom.no/markedsinnsikt/nokkeltall",
+          "value": 5.25,
+          "period": "Per mai 2026",
+          "status": "seed"
+        }
+      ]
+    }
+  },
+  "errors": [],
+  "note": "Seed-data. Overskrives automatisk av GitHub Action scripts/update-yields.mjs."
+}

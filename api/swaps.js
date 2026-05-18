@@ -1,211 +1,185 @@
 const SEB_SWAP_URL = "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates";
+const SEB_API_BASE = "https://sebgroup.com/ssc/trading/fx-rates-bff/api/rates/swap";
 
-const TARGETS = {
+const CURRENCIES = {
   NOK: {
     label: "Norge",
-    heading: "Swap [NOK]",
   },
   SEK: {
     label: "Sverige",
-    heading: "Swap [SEK]",
   },
 };
 
-const TENORS = {
-  "3Y": ["3 Yr", "3Y", "3 years", "3 år"],
-  "5Y": ["5 Yr", "5Y", "5 years", "5 år"],
-  "10Y": ["10 Yr", "10Y", "10 years", "10 år"],
+const TARGET_TENORS = {
+  "3Y": "3 Yr",
+  "5Y": "5 Yr",
+  "10Y": "10 Yr",
 };
 
 function parseNumber(value) {
   if (typeof value === "number") return value;
-  if (!value || typeof value !== "string") return Number.NaN;
-  return Number.parseFloat(
+  if (!value || typeof value !== "string") return null;
+
+  const parsed = Number.parseFloat(
     value
       .replace(/\s/g, "")
       .replace(",", ".")
       .replace(/[^\d.-]/g, "")
   );
+
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normaliseText(value) {
+function normaliseMaturity(value) {
   return String(value || "")
     .replace(/\u00A0/g, " ")
-    .replace(/[ \t]+/g, " ")
-    .trim();
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
 }
 
-function firstFinite(values) {
-  for (const value of values) {
-    const parsed = parseNumber(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
+function extractRows(payload) {
+  if (Array.isArray(payload?.rows)) return payload.rows;
+  if (Array.isArray(payload?.data?.rows)) return payload.data.rows;
+  if (Array.isArray(payload)) return payload;
+
+  throw new Error("SEB-responsen mangler rows-array.");
 }
 
-function findSectionText(fullText, heading) {
-  const normalised = fullText.replace(/\r/g, "\n");
-  const idx = normalised.toLowerCase().indexOf(heading.toLowerCase());
-
-  if (idx === -1) {
-    throw new Error(`Fant ikke SEB-seksjonen "${heading}".`);
-  }
-
-  const after = normalised.slice(idx);
-  const rest = after.slice(heading.length);
-  const nextHeadingMatch = rest.match(/\n\s*Swap\s+\[[A-Z]{3}\]/i);
-
-  if (!nextHeadingMatch) return after;
-
-  return after.slice(0, heading.length + nextHeadingMatch.index);
+function getCellValue(row, index) {
+  if (Array.isArray(row?.data)) return row.data[index]?.value;
+  if (Array.isArray(row)) return row[index]?.value ?? row[index];
+  return undefined;
 }
 
-function extractTenorRate(sectionText, aliases) {
-  const lines = sectionText
-    .split("\n")
-    .map(normaliseText)
-    .filter(Boolean);
+function extractRateForTenor(rows, targetMaturity) {
+  const target = normaliseMaturity(targetMaturity);
 
-  for (const alias of aliases) {
-    const escapedAlias = alias
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\s+/g, "\\s+");
+  const row = rows.find((candidate) => normaliseMaturity(getCellValue(candidate, 0)) === target);
 
-    const rowRegex = new RegExp(`^${escapedAlias}\\b(.+)$`, "i");
-
-    for (const line of lines) {
-      const match = line.match(rowRegex);
-      if (!match) continue;
-
-      const numberMatches = [...match[1].matchAll(/[-+]?\d+(?:[.,]\d+)?/g)].map((item) => item[0]);
-      const parsed = firstFinite(numberMatches);
-      if (Number.isFinite(parsed)) return parsed;
-    }
+  if (!row) {
+    throw new Error(`Fant ikke ${targetMaturity} i SEB-responsen.`);
   }
 
-  // Fallback for cases where the rendered table is compressed into fewer lines.
-  const compact = normaliseText(sectionText);
+  const price = parseNumber(getCellValue(row, 1));
+  const change = parseNumber(getCellValue(row, 2));
+  const time = getCellValue(row, 3) || null;
+  const date = getCellValue(row, 4) || null;
 
-  for (const alias of aliases) {
-    const escapedAlias = alias
-      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\s+/g, "\\s*");
-
-    const regex = new RegExp(`${escapedAlias}\\s+([-+]?\\d+(?:[.,]\\d+)?)`, "i");
-    const match = compact.match(regex);
-
-    if (match) {
-      const parsed = parseNumber(match[1]);
-      if (Number.isFinite(parsed)) return parsed;
-    }
+  if (!Number.isFinite(price)) {
+    throw new Error(`Klarte ikke å tolke pris for ${targetMaturity}.`);
   }
 
-  throw new Error(`Fant ikke tenor ${aliases[0]} i SEB-seksjonen.`);
+  return {
+    value: price,
+    change,
+    time,
+    date,
+  };
 }
 
-async function acceptCookiesIfPresent(page) {
-  const possibleLabels = [
-    "Accept all",
-    "Accept",
-    "Allow all",
-    "Godta alle",
-    "Godta",
-    "I accept",
-    "OK",
-  ];
+async function fetchSebCurrency(currency) {
+  const apiUrl = `${SEB_API_BASE}?currency=${encodeURIComponent(currency)}`;
 
-  for (const label of possibleLabels) {
-    try {
-      const button = page.getByRole("button", { name: label, exact: false }).first();
-      if (await button.count()) {
-        await button.click({ timeout: 1500 });
-        await page.waitForTimeout(700);
-        return;
-      }
-    } catch {
-      // Ignore cookie button misses.
-    }
-  }
-}
-
-async function getRenderedSebText() {
-  const chromiumModule = await import("@sparticuz/chromium");
-  const chromium = chromiumModule.default || chromiumModule;
-  const playwrightModule = await import("playwright-core");
-
-  const browser = await playwrightModule.chromium.launch({
-    // Vercel/Playwright expects a boolean here. @sparticuz/chromium.headless can be a string in some versions.
-    args: chromium.args,
-    executablePath: await chromium.executablePath(),
-    headless: true,
+  const response = await fetch(apiUrl, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "MarketDashboardPWA/1.0",
+      "Cache-Control": "no-cache",
+    },
   });
 
-  try {
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 1400 },
-      userAgent:
-        "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0; +https://vercel.app)",
-    });
-
-    await page.goto(SEB_SWAP_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: 45000,
-    });
-
-    await acceptCookiesIfPresent(page);
-
-    try {
-      await page.waitForFunction(
-        () => document.body && document.body.innerText && document.body.innerText.includes("Swap [NOK]"),
-        { timeout: 30000 }
-      );
-    } catch {
-      await page.waitForTimeout(7000);
-    }
-
-    return await page.locator("body").innerText({ timeout: 10000 });
-  } finally {
-    await browser.close();
+  if (!response.ok) {
+    throw new Error(`SEB API svarte med ${response.status} for ${currency}.`);
   }
-}
 
-function parseSebSwapText(text) {
-  const data = {};
+  const payload = await response.json();
+  const rows = extractRows(payload);
 
-  for (const [currency, config] of Object.entries(TARGETS)) {
-    const sectionText = findSectionText(text, config.heading);
+  const rates = {};
+  const meta = {};
 
-    const rates = {};
-    for (const [tenor, aliases] of Object.entries(TENORS)) {
-      rates[tenor] = extractTenorRate(sectionText, aliases);
-    }
-
-    data[currency] = {
-      label: config.label,
-      currency,
-      source: "SEB",
-      sourceUrl: SEB_SWAP_URL,
-      status: "ok",
-      rates,
+  for (const [key, maturity] of Object.entries(TARGET_TENORS)) {
+    const observation = extractRateForTenor(rows, maturity);
+    rates[key] = observation.value;
+    meta[key] = {
+      change: observation.change,
+      time: observation.time,
+      date: observation.date,
     };
   }
 
-  return data;
+  const firstMeta = meta["3Y"] || {};
+
+  return {
+    label: CURRENCIES[currency].label,
+    currency,
+    source: "SEB",
+    sourceUrl: SEB_SWAP_URL,
+    apiUrl,
+    status: "ok",
+    date: firstMeta.date || null,
+    time: firstMeta.time || null,
+    rates,
+    meta,
+  };
 }
 
 export default async function handler(request, response) {
   try {
-    const text = await getRenderedSebText();
-    const data = parseSebSwapText(text);
+    const settled = await Promise.allSettled(
+      Object.keys(CURRENCIES).map((currency) => fetchSebCurrency(currency))
+    );
+
+    const data = {};
+    const errors = [];
+
+    settled.forEach((result, index) => {
+      const currency = Object.keys(CURRENCIES)[index];
+
+      if (result.status === "fulfilled") {
+        data[currency] = result.value;
+      } else {
+        errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+        data[currency] = {
+          label: CURRENCIES[currency].label,
+          currency,
+          source: "SEB",
+          sourceUrl: SEB_SWAP_URL,
+          apiUrl: `${SEB_API_BASE}?currency=${currency}`,
+          status: "error",
+          date: null,
+          time: null,
+          rates: { "3Y": null, "5Y": null, "10Y": null },
+          meta: {},
+        };
+      }
+    });
+
+    const hasAnyValue = Object.values(data).some((entry) =>
+      Object.values(entry.rates || {}).some((value) => Number.isFinite(Number(value)))
+    );
+
+    if (!hasAnyValue) {
+      response.status(500).json({
+        status: "error",
+        sourceName: "SEB",
+        sourceUrl: SEB_SWAP_URL,
+        fetchedAt: new Date().toISOString(),
+        data,
+        errors: errors.length ? errors : ["Ingen SEB swap-rates ble hentet."],
+      });
+      return;
+    }
 
     response.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=1800");
     response.status(200).json({
-      status: "ok",
+      status: errors.length ? "partial" : "ok",
       sourceName: "SEB",
       sourceUrl: SEB_SWAP_URL,
       fetchedAt: new Date().toISOString(),
       data,
-      errors: [],
+      errors,
     });
   } catch (error) {
     response.status(500).json({

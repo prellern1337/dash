@@ -44,3 +44,13 @@ SEB swap-rates hentes ved app-lasting via `/api/swaps`.
 
 `api/swaps.js` uses `headless: true` explicitly. This avoids the Vercel/Playwright error:
 `browserType.launch: headless: expected boolean, got string`.
+
+
+## SEB swaps direct API
+
+SEB swap-rates are now fetched directly from SEB's JSON endpoints, without Chromium/Playwright in Vercel:
+
+- NOK: `https://sebgroup.com/ssc/trading/fx-rates-bff/api/rates/swap?currency=NOK`
+- SEK: `https://sebgroup.com/ssc/trading/fx-rates-bff/api/rates/swap?currency=SEK`
+
+`/api/swaps` extracts 3 Yr, 5 Yr and 10 Yr and returns them to the dashboard. This avoids the previous serverless Chromium errors.

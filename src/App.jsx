@@ -89,6 +89,30 @@ const fallbackStibor = {
   note: null,
 };
 
+const fallbackSwapState = {
+  status: "loading",
+  sourceName: "SEB",
+  sourceUrl: "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates",
+  fetchedAt: null,
+  message: null,
+  data: {
+    NOK: {
+      label: "Norge",
+      currency: "NOK",
+      source: "SEB",
+      status: "loading",
+      rates: { "3Y": null, "5Y": null, "10Y": null },
+    },
+    SEK: {
+      label: "Sverige",
+      currency: "SEK",
+      source: "SEB",
+      status: "loading",
+      rates: { "3Y": null, "5Y": null, "10Y": null },
+    },
+  },
+};
+
 const fallbackYieldState = {
   status: "loading",
   sourceName: "UNION M2 / Newsec",
@@ -131,6 +155,11 @@ const fallbackYieldState = {
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  return formatPercent(Number(value));
+}
+
+function formatOptionalRate(value) {
   if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
   return formatPercent(Number(value));
 }
@@ -403,7 +432,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Snittet beregnes av automatisk oppdatert yield-data. Jobben kjøres omtrent annenhver uke.
+            Snittet beregnes av automatisk oppdatert yield-data fra UNION, Newsec og Akershus. Jobben kjøres omtrent annenhver uke.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -411,9 +440,9 @@ function YieldOverlay({ onClose, yieldState }) {
     >
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
-          ? `Sist hentet fra UNION/Newsec: ${formatDateTimeShort(yieldState.fetchedAt)}`
+          ? `Sist oppdatert yield-data: ${formatDateTimeShort(yieldState.fetchedAt)}`
           : yieldState.status === "partial"
-            ? `Delvis hentet: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.message || ""}`
+            ? `Yield-data delvis oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.message || ""}`
             : yieldState.status === "loading"
               ? "Henter yielder fra UNION M2 og Newsec..."
               : `Kunne ikke hente yielder: ${yieldState.message || "Ukjent feil"}`}
@@ -483,6 +512,7 @@ export default function MarketDashboardPrototype() {
     message: null,
   });
   const [stiborState, setStiborState] = useState(fallbackStibor);
+  const [swapState, setSwapState] = useState(fallbackSwapState);
   const [yieldState, setYieldState] = useState(fallbackYieldState);
 
   useEffect(() => {
@@ -553,6 +583,36 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    async function loadSwaps() {
+      try {
+        const response = await fetch("/api/swaps");
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.errors?.join(" | ") || payload.message || "Kunne ikke hente SEB swap-rates.");
+        }
+
+        if (!cancelled) {
+          setSwapState({
+            status: "ok",
+            sourceName: payload.sourceName || "SEB",
+            sourceUrl: payload.sourceUrl || fallbackSwapState.sourceUrl,
+            fetchedAt: payload.fetchedAt,
+            message: null,
+            data: payload.data || fallbackSwapState.data,
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setSwapState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente SEB swap-rates.",
+          }));
+        }
+      }
+    }
+
     async function loadYields() {
       try {
         const response = await fetch("/api/yields");
@@ -591,6 +651,7 @@ export default function MarketDashboardPrototype() {
 
     loadFx();
     loadStibor();
+    loadSwaps();
     loadYields();
 
     return () => {
@@ -599,20 +660,20 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [fxState.fetchedAt, stiborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [fxState.fetchedAt, stiborState.fetchedAt, swapState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [fxState.fetchedAt, stiborState.fetchedAt, yieldState.fetchedAt]);
+  }, [fxState.fetchedAt, stiborState.fetchedAt, swapState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = fxState.status === "error" || stiborState.status === "error" || yieldState.status === "error";
+  const hasError = fxState.status === "error" || stiborState.status === "error" || swapState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
-    if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "FX + STIBOR + yield live" };
+    if (fxState.status === "ok" && stiborState.status === "ok" && swapState.status === "ok" && yieldState.status === "ok") {
+      return { tone: "good", label: "Marked live" };
     }
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "partial") {
       return { tone: "warn", label: "FX/STIBOR live · yield delvis" };
@@ -636,6 +697,13 @@ export default function MarketDashboardPrototype() {
       return {
         title: "STIBOR-kilde feilet",
         message: `${stiborState.message} Appen viser ikke hardkodet STIBOR-verdi når livekilden feiler.`,
+      };
+    }
+
+    if (swapState.status === "error") {
+      return {
+        title: "SEB swap feilet",
+        message: `${swapState.message} Langrenter viser tomme verdier til kilden fungerer igjen.`,
       };
     }
 
@@ -671,6 +739,8 @@ export default function MarketDashboardPrototype() {
     stiborState.message,
     stiborState.value,
     stiborState.date,
+    swapState.status,
+    swapState.message,
     yieldState.status,
     yieldState.message,
   ]);
@@ -738,22 +808,34 @@ export default function MarketDashboardPrototype() {
         </section>
 
         <main className="grid grid-cols-2 gap-3">
-          <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large">
+          <Tile
+            title="Norge"
+            source={swapState.status === "ok" ? "SEB live" : swapState.status === "loading" ? "Henter SEB" : "SEB feil"}
+            accent="violet"
+            icon={<TrendingUp size={17} />}
+            size="large"
+          >
             <RateStack
               rows={[
-                { label: "3Y swap", value: "4,12 %" },
-                { label: "5Y swap", value: "4,05 %" },
-                { label: "10Y swap", value: "4,02 %" },
+                { label: "3Y swap", value: formatOptionalRate(swapState.data.NOK.rates["3Y"]) },
+                { label: "5Y swap", value: formatOptionalRate(swapState.data.NOK.rates["5Y"]) },
+                { label: "10Y swap", value: formatOptionalRate(swapState.data.NOK.rates["10Y"]) },
               ]}
             />
           </Tile>
 
-          <Tile title="Sverige" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large">
+          <Tile
+            title="Sverige"
+            source={swapState.status === "ok" ? "SEB live" : swapState.status === "loading" ? "Henter SEB" : "SEB feil"}
+            accent="blue"
+            icon={<TrendingUp size={17} />}
+            size="large"
+          >
             <RateStack
               rows={[
-                { label: "3Y swap", value: "2,83 %" },
-                { label: "5Y swap", value: "2,92 %" },
-                { label: "10Y swap", value: "3,07 %" },
+                { label: "3Y swap", value: formatOptionalRate(swapState.data.SEK.rates["3Y"]) },
+                { label: "5Y swap", value: formatOptionalRate(swapState.data.SEK.rates["5Y"]) },
+                { label: "10Y swap", value: formatOptionalRate(swapState.data.SEK.rates["10Y"]) },
               ]}
             />
           </Tile>
@@ -829,7 +911,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta og 3M STIBOR hentes via API. Yield-data leses fra automatisk oppdatert JSON. SEB swap og 3M NIBOR kobles på senere.
+          Valuta, 3M STIBOR og SEB swap hentes via API ved app-lasting. Yield-data leses fra automatisk oppdatert JSON. 3M NIBOR kobles på senere.
         </footer>
       </div>
 

@@ -23,3 +23,18 @@ Mobiltilpasset PWA-dashboard for renter, valuta og eiendomsyield.
 ## Deploy
 
 Når filer committes til GitHub, deployer Vercel automatisk.
+
+
+## UI note
+
+Yield-overlayen viser nå samlet "Sist oppdatert yield-data" i stedet for bare "UNION/Newsec", fordi Akershus også inngår i samme automatisk oppdaterte yield-fil.
+
+
+## SEB swaps
+
+SEB swap-rates hentes ved app-lasting via `/api/swaps`.
+
+- Kilde: `https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates`
+- Henter Swap [NOK] og Swap [SEK]
+- Viser 3Y, 5Y og 10Y
+- Endepunktet bruker kort Vercel-cache (`s-maxage=300`) for å unngå unødvendig tung scraping ved mange raske åpninger.

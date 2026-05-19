@@ -8,9 +8,9 @@ Mobiltilpasset PWA-dashboard for renter, valuta og eiendomsyield.
 - 3M STIBOR hentes fra SFBF via `/api/stibor`
 - UNION M2 prime yield hentes live via `/api/yields`
 - 3M NIBOR er flyttet til Supabase-lagring:
-  - `/api/update-nibor` kjøres ukentlig via Vercel Cron
+  - `/api/update-nibor` kjøres manuelt nå og kan senere settes opp med cron
   - Oppdateringsjobben prøver først siste UNION Nøkkeltall-PDF fra `https://union.no/analyse`
-  - Hvis PDF-parsing feiler, prøver den UNIONs nøkkeltallside som HTML-fallback
+  - Hvis PDF ikke finnes eller PDF-parsing feiler, prøver den UNIONs nøkkeltallside som HTML-fallback
   - Hvis begge feiler, lagres feilen, men siste vellykkede verdi beholdes
   - `/api/nibor` leser siste vellykkede verdi fra Supabase
 - Newsec og Akershus Eiendom vises som "ikke koblet" og kobles på senere.
@@ -43,3 +43,8 @@ Service worker is configured with `navigateFallbackDenylist: [/^\/api\//]` so br
 
 `vercel.json` is removed in this package to avoid deployment failure while we test the Supabase-backed API routes manually.
 We can re-add scheduled cron jobs after `/api/update-nibor` and `/api/nibor` work in production.
+
+
+## NIBOR source priority
+
+PDF first / HTML fallback. No hardcoded NIBOR fallback value is used by the dashboard.

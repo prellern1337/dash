@@ -172,11 +172,17 @@ async function fetchFromLatestPdf() {
 
 function extractNibor3mFromHtml(html) {
   const text = stripHtml(html);
+
+  // UNION's public nøkkeltall page currently renders labels approximately like:
+  // "3m NIBOR. 4,73 %" or "3m NIBOR 4,73 %".
+  // Allow punctuation and arbitrary spacing between label and value.
   const patterns = [
-    /3\s*m\s+NIBOR\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /3m\s+NIBOR\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /NIBOR[\s\S]{0,120}?3\s*m[\s\S]{0,80}?([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /NIBOR[\s\S]{0,120}?3m[\s\S]{0,80}?([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /3\s*m\s*NIBOR[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /3m\s*NIBOR[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /NIBOR[\s.:–—-]*3\s*m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /NIBOR[\s.:–—-]*3m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /(?:^|\s)3\s*m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,80}?NIBOR/i,
+    /(?:^|\s)3m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,80}?NIBOR/i,
   ];
 
   for (const pattern of patterns) {
@@ -221,14 +227,16 @@ async function fetchFromUnionHtml() {
 async function fetchNiborWithFallbacks() {
   const errors = [];
 
-  // Preferred source: the latest Nøkkeltall PDF, because that is the source used in the dashboard screenshot.
+  // Preferred source: latest UNION Nøkkeltall PDF.
+  // This matches the dashboard source the user asked for.
   try {
     return await fetchFromLatestPdf();
   } catch (error) {
     errors.push(`PDF: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // Alternative source if PDF parsing breaks.
+  // Secondary source: UNION's public nøkkeltall HTML page.
+  // Used only if PDF discovery/parsing fails.
   try {
     return await fetchFromUnionHtml();
   } catch (error) {

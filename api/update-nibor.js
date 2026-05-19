@@ -1,6 +1,12 @@
+import { createRequire } from "module";
 import { getLatestMetric, insertMetric } from "./_lib/supabase.js";
 
+const require = createRequire(import.meta.url);
 const METRIC_KEY = "nibor_3m";
+
+export const config = {
+  maxDuration: 60,
+};
 
 function absoluteUrl(url, baseUrl = "https://union.no") {
   if (!url) return null;
@@ -35,16 +41,47 @@ function parseNumber(value) {
   return Number.parseFloat(value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, ""));
 }
 
-function findLatestNokkeltallPdf(html) {
-  const candidates = [];
-  const hrefRegex = /<a\b[^>]*href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let match;
+async function renderPage(url) {
+  const chromium = (await import("@sparticuz/chromium")).default;
+  const puppeteer = await import("puppeteer-core");
 
-  while ((match = hrefRegex.exec(html)) !== null) {
-    const href = decodeHtml(match[1]);
-    const label = stripHtml(match[2]);
+  const browser = await puppeteer.launch({
+    args: chromium.args,
+    defaultViewport: chromium.defaultViewport,
+    executablePath: await chromium.executablePath(),
+    headless: chromium.headless,
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setUserAgent("Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)");
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
+    await page.waitForTimeout(1500);
+
+    return await page.evaluate(() => ({
+      text: document.body ? document.body.innerText : "",
+      html: document.documentElement ? document.documentElement.outerHTML : "",
+      links: Array.from(document.querySelectorAll("a"))
+        .map((a) => ({
+          href: a.href || a.getAttribute("href") || "",
+          text: a.innerText || a.textContent || "",
+        }))
+        .filter((link) => link.href),
+    }));
+  } finally {
+    await browser.close();
+  }
+}
+
+function findLatestNokkeltallPdfFromLinks(links) {
+  const candidates = [];
+
+  for (const link of links || []) {
+    const href = decodeHtml(link.href || "");
+    const label = stripHtml(link.text || "");
     const combined = `${href} ${label}`.toLowerCase();
 
+    if (!href.toLowerCase().includes(".pdf")) continue;
     if (!combined.includes("nøkkeltall") && !combined.includes("nokkeltall")) continue;
 
     const weekMatch = combined.match(/uke[-_\s]*(\d{1,2})/i);
@@ -59,27 +96,8 @@ function findLatestNokkeltallPdf(html) {
     });
   }
 
-  const rawPdfRegex = /https?:\\?\/\\?\/[^"'\s<>]+?\.pdf[^"'\s<>]*/gi;
-  for (const rawUrl of html.match(rawPdfRegex) || []) {
-    const cleaned = decodeHtml(rawUrl.replace(/\\\//g, "/"));
-    const combined = cleaned.toLowerCase();
-    if (!combined.includes("nøkkeltall") && !combined.includes("nokkeltall")) continue;
-    if (candidates.some((candidate) => candidate.url === cleaned)) continue;
-
-    const weekMatch = combined.match(/uke[-_\s]*(\d{1,2})/i);
-    const yearMatch = combined.match(/\b(20\d{2})\b/);
-
-    candidates.push({
-      url: cleaned,
-      label: cleaned.split("/").pop(),
-      week: weekMatch ? Number.parseInt(weekMatch[1], 10) : null,
-      year: yearMatch ? Number.parseInt(yearMatch[1], 10) : null,
-      index: candidates.length,
-    });
-  }
-
   if (!candidates.length) {
-    throw new Error("Fant ingen UNION Nøkkeltall-PDF på union.no/analyse.");
+    throw new Error("Fant ingen UNION Nøkkeltall-PDF i rendret analyse-side.");
   }
 
   candidates.sort((a, b) => {
@@ -98,14 +116,14 @@ function extractNibor3mFromPdfText(pdfText) {
     .replace(/N1BOR/gi, "NIBOR")
     .trim();
 
-  const sectionMatch = text.match(/RENTER[\s\S]{0,1800}?(?=10-ÅRS SWAP|10 ÅRS SWAP|OBLIGASJONSUTSTED|M2 ANALYSEPORTAL|$)/i);
+  const sectionMatch = text.match(/RENTER[\s\S]{0,2000}?(?=10-ÅRS SWAP|10 ÅRS SWAP|OBLIGASJONSUTSTED|M2 ANALYSEPORTAL|$)/i);
   const section = sectionMatch ? sectionMatch[0] : text;
 
   const patterns = [
-    /NIBOR[\s\S]{0,350}?(?:^|\s)3\s*m\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /NIBOR[\s\S]{0,350}?(?:^|\s)3m\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /(?:^|\s)3\s*m\s+([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,250}?(?:6\s*m|6m|SWAP)/i,
-    /(?:^|\s)3m\s+([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,250}?(?:6m|SWAP)/i,
+    /NIBOR[\s\S]{0,450}?(?:^|\s)3\s*m\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /NIBOR[\s\S]{0,450}?(?:^|\s)3m\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    /(?:^|\s)3\s*m\s+([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,350}?(?:6\s*m|6m|SWAP)/i,
+    /(?:^|\s)3m\s+([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,350}?(?:6m|SWAP)/i,
   ];
 
   for (const pattern of patterns) {
@@ -118,30 +136,9 @@ function extractNibor3mFromPdfText(pdfText) {
   throw new Error("Fant ikke NIBOR 3m i UNION Nøkkeltall-PDF.");
 }
 
-async function fetchUnionAnalysisHtml() {
-  const pageUrl = "https://union.no/analyse";
-
-  const response = await fetch(pageUrl, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`UNION analyse svarte med ${response.status}.`);
-  }
-
-  return {
-    pageUrl,
-    html: await response.text(),
-  };
-}
-
-async function fetchFromLatestPdf() {
-  const { html } = await fetchUnionAnalysisHtml();
-  const latestPdf = findLatestNokkeltallPdf(html);
+async function fetchFromRenderedLatestPdf() {
+  const rendered = await renderPage("https://union.no/analyse");
+  const latestPdf = findLatestNokkeltallPdfFromLinks(rendered.links);
 
   const pdfResponse = await fetch(latestPdf.url, {
     headers: {
@@ -155,7 +152,7 @@ async function fetchFromLatestPdf() {
     throw new Error(`UNION Nøkkeltall-PDF svarte med ${pdfResponse.status}.`);
   }
 
-  const { default: pdfParse } = await import("pdf-parse");
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js");
   const parsed = await pdfParse(Buffer.from(await pdfResponse.arrayBuffer()));
   const value = extractNibor3mFromPdfText(parsed.text);
 
@@ -166,52 +163,34 @@ async function fetchFromLatestPdf() {
     source_url: latestPdf.url,
     source_document: latestPdf.label,
     observed_date: null,
-    method: "pdf_parse",
+    method: "rendered_pdf_parse",
   };
 }
 
-function extractNibor3mFromHtml(html) {
-  const text = stripHtml(html);
+function extractNibor3mFromRenderedText(text) {
+  const cleaned = String(text || "").replace(/\s+/g, " ").trim();
 
-  // UNION's public nøkkeltall page currently renders labels approximately like:
-  // "3m NIBOR. 4,73 %" or "3m NIBOR 4,73 %".
-  // Allow punctuation and arbitrary spacing between label and value.
   const patterns = [
     /3\s*m\s*NIBOR[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
     /3m\s*NIBOR[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
     /NIBOR[\s.:–—-]*3\s*m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
     /NIBOR[\s.:–—-]*3m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /(?:^|\s)3\s*m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,80}?NIBOR/i,
-    /(?:^|\s)3m[\s.:–—-]*([-+]?\d+(?:[,.]\d+)?)\s*%[\s\S]{0,80}?NIBOR/i,
   ];
 
   for (const pattern of patterns) {
-    const found = text.match(pattern);
+    const found = cleaned.match(pattern);
     if (!found) continue;
     const value = parseNumber(found[1]);
     if (Number.isFinite(value) && value > 0 && value < 20) return value;
   }
 
-  throw new Error("Fant ikke 3m NIBOR i UNION nøkkeltall-HTML.");
+  throw new Error("Fant ikke 3m NIBOR i rendret UNION nøkkeltallside.");
 }
 
-async function fetchFromUnionHtml() {
+async function fetchFromRenderedHtml() {
   const url = "https://union.no/naering/analyse/nokkeltall";
-
-  const response = await fetch(url, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`UNION nøkkeltallside svarte med ${response.status}.`);
-  }
-
-  const html = await response.text();
-  const value = extractNibor3mFromHtml(html);
+  const rendered = await renderPage(url);
+  const value = extractNibor3mFromRenderedText(rendered.text);
 
   return {
     value,
@@ -220,27 +199,25 @@ async function fetchFromUnionHtml() {
     source_url: url,
     source_document: "UNION nøkkeltallside",
     observed_date: null,
-    method: "html_parse",
+    method: "rendered_html_parse",
   };
 }
 
 async function fetchNiborWithFallbacks() {
   const errors = [];
 
-  // Preferred source: latest UNION Nøkkeltall PDF.
-  // This matches the dashboard source the user asked for.
+  // Preferred source: rendered UNION analysis page -> latest Nøkkeltall PDF.
   try {
-    return await fetchFromLatestPdf();
+    return await fetchFromRenderedLatestPdf();
   } catch (error) {
-    errors.push(`PDF: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`PDF-render: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  // Secondary source: UNION's public nøkkeltall HTML page.
-  // Used only if PDF discovery/parsing fails.
+  // Fallback: rendered UNION nøkkeltall page.
   try {
-    return await fetchFromUnionHtml();
+    return await fetchFromRenderedHtml();
   } catch (error) {
-    errors.push(`HTML: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`HTML-render: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const combinedError = new Error(errors.join(" | "));
@@ -290,7 +267,7 @@ export default async function handler(request, response) {
       status: "error",
       message,
       raw: {
-        stage: "update-nibor",
+        stage: "update-nibor-rendered",
       },
     });
 

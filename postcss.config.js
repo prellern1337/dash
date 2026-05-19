@@ -1,25 +1,6 @@
-{
-  "scripts": {
-    "dev": "vite --host 0.0.0.0",
-    "build": "vite build",
-    "preview": "vite preview --host 0.0.0.0"
-  },
-  "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest",
-    "framer-motion": "latest",
-    "lucide-react": "latest",
-    "recharts": "latest",
-    "@supabase/supabase-js": "latest",
-    "pdf-parse": "latest"
-  },
-  "devDependencies": {
-    "tailwindcss": "3.4.17",
-    "postcss": "8.4.49",
-    "autoprefixer": "10.4.20",
-    "vite-plugin-pwa": "latest"
-  },
-  "type": "module"
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
 }

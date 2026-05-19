@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/update-nibor",
+      "schedule": "30 8 * * *"
+    }
+  ]
+}

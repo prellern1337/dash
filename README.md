@@ -36,3 +36,25 @@ Ingen `vercel.json` i denne pakken. Når manuell test fungerer, kan vi legge til
 
 NIBOR tile loading/fallback labels now say SpareBank 1 Markets instead of UNION.
 If the browser still shows UNION after deploy, clear PWA/site data or test in incognito.
+
+
+## Cron enabled
+
+This package adds one Vercel Cron job:
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/update-nibor",
+      "schedule": "30 8 * * *"
+    }
+  ]
+}
+```
+
+The schedule is UTC:
+- 08:30 UTC = 10:30 Norway summer time
+- 08:30 UTC = 09:30 Norway winter time
+
+It runs once per day and updates 3M NIBOR from SpareBank 1 Markets into Supabase.

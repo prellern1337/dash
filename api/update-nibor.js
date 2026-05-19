@@ -56,7 +56,7 @@ async function renderPage(url) {
     const page = await browser.newPage();
     await page.setUserAgent("Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)");
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-    await page.waitForTimeout(1500);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
 
     return await page.evaluate(() => ({
       text: document.body ? document.body.innerText : "",

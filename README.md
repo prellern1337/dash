@@ -52,3 +52,8 @@ It tries:
 1. Render `union.no/analyse` and find latest Nøkkeltall PDF.
 2. Parse NIBOR 3m from that PDF.
 3. If that fails, render `union.no/naering/analyse/nokkeltall` and parse 3m NIBOR from visible text.
+
+
+## Puppeteer timeout fix
+
+Replaced `page.waitForTimeout(1500)` with a standard Promise-based delay for compatibility with newer `puppeteer-core` versions.

@@ -1,12 +1,7 @@
-{
-  "crons": [
-    {
-      "path": "/api/yields",
-      "schedule": "30 13 * * 3"
-    },
-    {
-      "path": "/api/update-nibor",
-      "schedule": "45 13 * * 3"
-    }
-  ]
+export default {
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {}
+  },
+  plugins: []
 }

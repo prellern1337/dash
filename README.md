@@ -30,3 +30,9 @@ SUPABASE_SERVICE_ROLE_KEY
 ## Cron
 
 Ingen `vercel.json` i denne pakken. Når manuell test fungerer, kan vi legge til ukentlig cron etterpå.
+
+
+## UI fix
+
+NIBOR tile loading/fallback labels now say SpareBank 1 Markets instead of UNION.
+If the browser still shows UNION after deploy, clear PWA/site data or test in incognito.

@@ -91,8 +91,8 @@ const fallbackStibor = {
 
 const fallbackNibor = {
   status: "loading",
-  sourceName: "UNION Nøkkeltall",
-  sourceUrl: "https://union.no/analyse",
+  sourceName: "SpareBank 1 Markets",
+  sourceUrl: "https://www.sparebank1.no/content/dam/SB1/bank/sor-norge/markedsrapporter/markets/daglig_oppdatering/morgenmelding_valuta.pdf",
   value: null,
   unit: "%",
   sourceDocument: null,
@@ -554,8 +554,8 @@ export default function MarketDashboardPrototype() {
         if (!cancelled) {
           setNiborState({
             status: payload.status || "empty",
-            sourceName: payload.sourceName || "UNION Nøkkeltall",
-            sourceUrl: payload.sourceUrl || "https://union.no/analyse",
+            sourceName: payload.sourceName || "SpareBank 1 Markets",
+            sourceUrl: payload.sourceUrl || "https://www.sparebank1.no/content/dam/SB1/bank/sor-norge/markedsrapporter/markets/daglig_oppdatering/morgenmelding_valuta.pdf",
             value: payload.value,
             unit: payload.unit || "%",
             sourceDocument: payload.sourceDocument || null,
@@ -682,7 +682,7 @@ export default function MarketDashboardPrototype() {
     if (niborState.status === "empty") {
       return {
         title: "NIBOR er ikke initialisert",
-        message: "Kjør /api/update-nibor én gang etter deploy. Deretter leser appen sist vellykkede verdi fra Supabase.",
+        message: "Kjør /api/update-nibor én gang etter deploy. Da henter appen 3M NIBOR fra SpareBank 1 Markets og lagrer verdien i Supabase.",
       };
     }
 

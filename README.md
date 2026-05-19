@@ -1,60 +1,25 @@
-# Marked Dashboard PWA — SB1 NIBOR source
+# Marked Dashboard PWA — SEB swaps live
 
-Denne pakken bruker SpareBank 1 Markets Morgenrapport Renter og Valuta som praktisk åpen kilde for 3M NIBOR.
+Denne pakken kobler SEB swap-tilene til et nytt API-endepunkt:
 
-## NIBOR-flyt
+```text
+/api/swaps
+```
 
-- `/api/update-nibor`
-  - henter PDF fra SpareBank 1 Markets
-  - parser 3M NIBOR
-  - lagrer resultatet i Supabase-tabellen `market_metrics`
-  - lagrer feilstatus hvis henting/parsing feiler, men overskriver ikke sist vellykkede verdi
+Det henter `Swap [NOK]` og `Swap [SEK]` fra SEB-siden og trekker ut:
 
-- `/api/nibor`
-  - leser siste vellykkede `nibor_3m` fra Supabase
-  - viser `stale` dersom siste kjøring feilet etter siste gode verdi
+- 3 Yr
+- 5 Yr
+- 10 Yr
+
+Dashboardet kaller `/api/swaps` ved pageload.
 
 ## Test etter deploy
 
-1. `/api/health`
-2. `/api/update-nibor`
-3. `/api/nibor`
+1. `/api/health` skal vise `package: seb-swaps-live`
+2. `/api/swaps` skal returnere JSON med `data.NOK.rates` og `data.SEK.rates`
+3. Hvis parsing feiler, test `/api/debug-seb-swaps`
 
-## Environment variables i Vercel
+## NIBOR
 
-```text
-SUPABASE_URL
-SUPABASE_SERVICE_ROLE_KEY
-```
-
-## Cron
-
-Ingen `vercel.json` i denne pakken. Når manuell test fungerer, kan vi legge til ukentlig cron etterpå.
-
-
-## UI fix
-
-NIBOR tile loading/fallback labels now say SpareBank 1 Markets instead of UNION.
-If the browser still shows UNION after deploy, clear PWA/site data or test in incognito.
-
-
-## Cron enabled
-
-This package adds one Vercel Cron job:
-
-```json
-{
-  "crons": [
-    {
-      "path": "/api/update-nibor",
-      "schedule": "30 8 * * *"
-    }
-  ]
-}
-```
-
-The schedule is UTC:
-- 08:30 UTC = 10:30 Norway summer time
-- 08:30 UTC = 09:30 Norway winter time
-
-It runs once per day and updates 3M NIBOR from SpareBank 1 Markets into Supabase.
+NIBOR er fortsatt basert på SpareBank 1 Markets + Supabase.

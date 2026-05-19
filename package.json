@@ -13,7 +13,9 @@
     "framer-motion": "11.11.17",
     "lucide-react": "0.468.0",
     "pdf-parse": "1.1.1",
-    "recharts": "2.13.3"
+    "recharts": "2.13.3",
+    "@sparticuz/chromium": "latest",
+    "puppeteer-core": "latest"
   },
   "devDependencies": {
     "tailwindcss": "3.4.17",

@@ -32,3 +32,9 @@ Deretter kjører Vercel Cron ukentlig.
 ## Deploy
 
 Når filer committes til GitHub, deployer Vercel automatisk.
+
+
+## NIBOR PDF parser note
+
+This version imports `pdf-parse/lib/pdf-parse.js` directly via `createRequire`.
+This avoids the package main entry's debug/test path in Vercel/serverless builds.

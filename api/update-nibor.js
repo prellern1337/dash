@@ -1,4 +1,7 @@
+import { createRequire } from "module";
 import { getLatestMetric, insertMetric } from "./_lib/supabase.js";
+
+const require = createRequire(import.meta.url);
 
 const METRIC_KEY = "nibor_3m";
 
@@ -155,7 +158,9 @@ async function fetchFromLatestPdf() {
     throw new Error(`UNION Nøkkeltall-PDF svarte med ${pdfResponse.status}.`);
   }
 
-  const { default: pdfParse } = await import("pdf-parse");
+  // Use the internal parser file directly. The package main entry can execute its
+  // debug/test path in some serverless builds, which renders bundled sample PDFs.
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js");
   const parsed = await pdfParse(Buffer.from(await pdfResponse.arrayBuffer()));
   const value = extractNibor3mFromPdfText(parsed.text);
 

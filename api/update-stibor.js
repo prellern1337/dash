@@ -1,6 +1,8 @@
 import { insertMetric, getLatestMetric } from "./_lib/supabase.js";
 
 const METRIC_KEY = "stibor_3m";
+const RIKSBANK_SERIES_ID = "SEDP3MSTIBORDELAYC";
+const RIKSBANK_STIBOR_URL = `https://api.riksbank.se/swea/v1/Observations/Latest/${RIKSBANK_SERIES_ID}`;
 const SFBF_STIBOR_URL = "https://swfbf.se/stibor/rates/";
 
 function parseNumber(value) {
@@ -13,6 +15,7 @@ function normaliseDate(value) {
   if (!value) return null;
 
   const text = String(value).trim();
+
   const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
   if (isoMatch) return isoMatch[0];
 
@@ -41,6 +44,141 @@ function normaliseDate(value) {
   return `${year}-${month}-${String(day).padStart(2, "0")}`;
 }
 
+function isLikelyDate(value) {
+  if (value === null || value === undefined) return false;
+  const text = String(value);
+  return /\d{4}-\d{2}-\d{2}/.test(text) || /\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4}/.test(text);
+}
+
+function findObservationCandidate(payload) {
+  const candidates = [];
+
+  function visit(node) {
+    if (!node || typeof node !== "object") return;
+
+    if (Array.isArray(node)) {
+      node.forEach(visit);
+      return;
+    }
+
+    const entries = Object.entries(node);
+    const lower = new Map(entries.map(([key, value]) => [key.toLowerCase(), value]));
+
+    const valueKeys = [
+      "value",
+      "valueasstring",
+      "observationvalue",
+      "observation_value",
+      "obsvalue",
+      "obs_value",
+      "result",
+      "rate",
+    ];
+
+    const dateKeys = [
+      "date",
+      "datevalue",
+      "date_value",
+      "observationdate",
+      "observation_date",
+      "period",
+      "timeperiod",
+      "time_period",
+      "published",
+      "publishedat",
+      "published_at",
+      "validfrom",
+      "valid_from",
+    ];
+
+    let value = null;
+    let valueKey = null;
+    let date = null;
+
+    for (const key of valueKeys) {
+      if (!lower.has(key)) continue;
+      const numeric = parseNumber(String(lower.get(key)));
+      if (Number.isFinite(numeric) && numeric > -10 && numeric < 30) {
+        value = numeric;
+        valueKey = key;
+        break;
+      }
+    }
+
+    for (const key of dateKeys) {
+      if (!lower.has(key)) continue;
+      if (isLikelyDate(lower.get(key))) {
+        date = normaliseDate(lower.get(key));
+        break;
+      }
+    }
+
+    if (value !== null) {
+      candidates.push({
+        value,
+        date,
+        valueKey,
+        objectKeys: Object.keys(node),
+      });
+    }
+
+    entries.forEach(([, child]) => visit(child));
+  }
+
+  visit(payload);
+
+  const filtered = candidates
+    .filter((candidate) => candidate.valueKey !== "groupid")
+    .sort((a, b) => {
+      if (a.date && !b.date) return -1;
+      if (!a.date && b.date) return 1;
+      return 0;
+    });
+
+  const best = filtered[0];
+
+  if (!best) throw new Error("Fant ingen observasjon i Riksbanken-responsen.");
+
+  return {
+    value: best.value,
+    observed_date: best.date,
+    rawCandidate: {
+      valueKey: best.valueKey,
+      objectKeys: best.objectKeys,
+    },
+  };
+}
+
+async function fetchFromRiksbank() {
+  const response = await fetch(RIKSBANK_STIBOR_URL, {
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "MarketDashboardPWA/1.0",
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!response.ok) throw new Error(`Riksbanken API svarte med ${response.status}.`);
+
+  const payload = await response.json();
+  const observation = findObservationCandidate(payload);
+
+  return {
+    value: observation.value,
+    unit: "%",
+    source_name: "Riksbanken STIBOR 3M",
+    source_url: RIKSBANK_STIBOR_URL,
+    source_document: RIKSBANK_SERIES_ID,
+    observed_date: observation.observed_date,
+    method: "riksbank_latest_api",
+    raw: {
+      source: "Riksbanken SWEA API",
+      seriesId: RIKSBANK_SERIES_ID,
+      candidate: observation.rawCandidate,
+    },
+  };
+}
+
 function htmlToText(html) {
   return String(html || "")
     .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -54,19 +192,11 @@ function htmlToText(html) {
     .trim();
 }
 
-function extractStibor3mFromText(textInput) {
+function extractStibor3mFromSfbfText(textInput) {
   const text = htmlToText(textInput);
-
   const patterns = [
-    // Normal SFBF table:
-    // 15 May 2026 3 Months 2.003
     /(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})\s+3\s*Months?\s+([-+]?\d+(?:[.,]\d+)?)/i,
-
-    // Date after value variant:
-    // 3 Months 2.003 15 May 2026
     /3\s*Months?\s+([-+]?\d+(?:[.,]\d+)?)[\s\S]{0,80}?(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})/i,
-
-    // Loose fallback:
     /3\s*Months?[^0-9+-]{0,80}([-+]?\d+(?:[.,]\d+)?)/i,
   ];
 
@@ -74,22 +204,19 @@ function extractStibor3mFromText(textInput) {
     const match = text.match(pattern);
     if (!match) continue;
 
-    const hasDateFirst = /\d{1,2}/.test(match[1] || "") && /[A-Za-zÅÄÖåäö]/.test(match[1] || "");
-    const value = parseNumber(hasDateFirst ? match[2] : match[1]);
-    const date = hasDateFirst ? normaliseDate(match[1]) : normaliseDate(match[2]);
+    const firstLooksLikeDate = isLikelyDate(match[1]);
+    const value = parseNumber(firstLooksLikeDate ? match[2] : match[1]);
+    const date = firstLooksLikeDate ? normaliseDate(match[1]) : normaliseDate(match[2]);
 
     if (Number.isFinite(value) && value > -10 && value < 30) {
-      return {
-        value,
-        date,
-      };
+      return { value, observed_date: date };
     }
   }
 
   throw new Error("Fant ikke 3 Months STIBOR i SFBF-tekst.");
 }
 
-async function fetchRawSfbf() {
+async function fetchFromSfbfRaw() {
   const response = await fetch(SFBF_STIBOR_URL, {
     headers: {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -99,63 +226,34 @@ async function fetchRawSfbf() {
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`SFBF svarte med ${response.status}.`);
-  }
+  if (!response.ok) throw new Error(`SFBF svarte med ${response.status}.`);
 
-  const html = await response.text();
-  const observation = extractStibor3mFromText(html);
-
+  const observation = extractStibor3mFromSfbfText(await response.text());
   return {
     value: observation.value,
-    observed_date: observation.date,
+    unit: "%",
+    source_name: "SFBF STIBOR",
+    source_url: SFBF_STIBOR_URL,
+    source_document: "STIBOR Rates",
+    observed_date: observation.observed_date,
     method: "sfbf_raw_html",
+    raw: { source: "SFBF" },
   };
-}
-
-async function fetchRenderedSfbf() {
-  const chromium = (await import("@sparticuz/chromium")).default;
-  const puppeteer = await import("puppeteer-core");
-
-  const browser = await puppeteer.launch({
-    args: chromium.args,
-    defaultViewport: { width: 1280, height: 1200 },
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-  });
-
-  try {
-    const page = await browser.newPage();
-    await page.setUserAgent("Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)");
-    await page.goto(SFBF_STIBOR_URL, { waitUntil: "networkidle2", timeout: 45000 });
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    const renderedText = await page.evaluate(() => document.body ? document.body.innerText : "");
-    const observation = extractStibor3mFromText(renderedText);
-
-    return {
-      value: observation.value,
-      observed_date: observation.date,
-      method: "sfbf_rendered_html",
-    };
-  } finally {
-    await browser.close();
-  }
 }
 
 async function fetchStiborWithFallbacks() {
   const errors = [];
 
   try {
-    return await fetchRawSfbf();
+    return await fetchFromRiksbank();
   } catch (error) {
-    errors.push(`raw: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`Riksbank: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {
-    return await fetchRenderedSfbf();
+    return await fetchFromSfbfRaw();
   } catch (error) {
-    errors.push(`rendered: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`SFBF: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   throw new Error(errors.join(" | "));
@@ -170,24 +268,18 @@ export default async function handler(request, response) {
     const saved = await insertMetric({
       metric_key: METRIC_KEY,
       value: result.value,
-      unit: "%",
-      source_name: "SFBF STIBOR",
-      source_url: SFBF_STIBOR_URL,
-      source_document: "STIBOR Rates",
+      unit: result.unit,
+      source_name: result.source_name,
+      source_url: result.source_url,
+      source_document: result.source_document,
       observed_date: result.observed_date,
       fetched_at: fetchedAt,
       status: "ok",
       message: null,
-      raw: {
-        method: result.method,
-      },
+      raw: { method: result.method, ...result.raw },
     });
 
-    response.status(200).json({
-      status: "ok",
-      metricKey: METRIC_KEY,
-      saved,
-    });
+    response.status(200).json({ status: "ok", metricKey: METRIC_KEY, saved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ukjent feil ved oppdatering av 3M STIBOR.";
 
@@ -195,25 +287,17 @@ export default async function handler(request, response) {
       metric_key: METRIC_KEY,
       value: null,
       unit: "%",
-      source_name: "SFBF STIBOR",
-      source_url: SFBF_STIBOR_URL,
-      source_document: "STIBOR Rates",
+      source_name: "Riksbanken / SFBF",
+      source_url: RIKSBANK_STIBOR_URL,
+      source_document: RIKSBANK_SERIES_ID,
       observed_date: null,
       fetched_at: fetchedAt,
       status: "error",
       message,
-      raw: {
-        stage: "update-stibor",
-      },
+      raw: { stage: "update-stibor" },
     });
 
     const { latestGood } = await getLatestMetric(METRIC_KEY);
-
-    response.status(200).json({
-      status: "error",
-      metricKey: METRIC_KEY,
-      message,
-      latestGood,
-    });
+    response.status(200).json({ status: "error", metricKey: METRIC_KEY, message, latestGood });
   }
 }

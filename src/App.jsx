@@ -80,13 +80,15 @@ const fallbackFxPairs = [
 
 const fallbackStibor = {
   status: "loading",
-  sourceName: "SFBF",
+  sourceName: "SFBF STIBOR",
   sourceUrl: "https://swfbf.se/stibor/rates/",
   value: null,
-  date: null,
+  unit: "%",
+  sourceDocument: null,
+  observedDate: null,
   fetchedAt: null,
   message: null,
-  note: null,
+  lastRun: null,
 };
 
 const fallbackNibor = {
@@ -578,14 +580,16 @@ export default function MarketDashboardPrototype() {
 
         if (!cancelled) {
           setStiborState({
-            status: payload.status === "fallback" ? "fallback" : "ok",
-            sourceName: payload.sourceName || "SFBF",
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "SFBF STIBOR",
             sourceUrl: payload.sourceUrl || "https://swfbf.se/stibor/rates/",
             value: payload.value,
-            date: payload.date,
-            fetchedAt: payload.fetchedAt,
+            unit: payload.unit || "%",
+            sourceDocument: payload.sourceDocument || null,
+            observedDate: payload.observedDate || null,
+            fetchedAt: payload.fetchedAt || null,
             message: payload.message || null,
-            note: payload.note || null,
+            lastRun: payload.lastRun || null,
           });
         }
       } catch (error) {
@@ -692,6 +696,12 @@ export default function MarketDashboardPrototype() {
     if (swapsState.status === "error") {
       return { tone: "bad", label: "SEB swap feilet" };
     }
+    if (stiborState.status === "stale") {
+      return { tone: "warn", label: "STIBOR sist vellykket" };
+    }
+    if (stiborState.status === "empty") {
+      return { tone: "warn", label: "STIBOR ikke initialisert" };
+    }
     if (niborState.status === "stale") {
       return { tone: "warn", label: "NIBOR sist vellykket" };
     }
@@ -728,8 +738,22 @@ export default function MarketDashboardPrototype() {
 
     if (stiborState.status === "error") {
       return {
-        title: "STIBOR-kilde feilet",
-        message: `${stiborState.message} Appen viser ikke hardkodet STIBOR-verdi når livekilden feiler.`,
+        title: "STIBOR-lesing feilet",
+        message: `${stiborState.message} Appen leser STIBOR fra Supabase, ikke fra hardkodet fallback.`,
+      };
+    }
+
+    if (stiborState.status === "empty") {
+      return {
+        title: "STIBOR er ikke initialisert",
+        message: "Kjør /api/update-stibor én gang etter deploy. Deretter leser appen sist vellykkede verdi fra Supabase.",
+      };
+    }
+
+    if (stiborState.status === "stale") {
+      return {
+        title: "STIBOR viser sist vellykkede verdi",
+        message: `${stiborState.message || "Siste oppdatering feilet."} Viser verdien lagret ${formatDateTimeShort(stiborState.fetchedAt)}.`,
       };
     }
 
@@ -758,13 +782,6 @@ export default function MarketDashboardPrototype() {
       return {
         title: "NIBOR viser sist vellykkede verdi",
         message: `${niborState.message || "Siste oppdatering feilet."} Viser verdien lagret ${formatDateTimeShort(niborState.fetchedAt)}.`,
-      };
-    }
-
-    if (stiborState.status === "fallback") {
-      return {
-        title: "STIBOR bruker sist verifiserte verdi",
-        message: `${stiborState.message || "Livehenting fra SFBF feilet."} Viser 3M STIBOR ${formatNumber(stiborState.value, 3)} % fra ${stiborState.date}.`,
       };
     }
 
@@ -905,12 +922,16 @@ export default function MarketDashboardPrototype() {
             unit="%"
             subtitle={
               stiborState.status === "ok"
-                ? `Dato: ${stiborState.date || "—"}`
-                : stiborState.status === "fallback"
-                  ? `Siste verifiserte: ${stiborState.date || "—"}`
-                  : stiborState.status === "loading"
-                    ? "Henter live-verdi"
-                    : "Ingen verdi"
+                ? stiborState.observedDate
+                  ? `Dato: ${stiborState.observedDate}`
+                  : `Lagret: ${formatDateTimeShort(stiborState.fetchedAt)}`
+                : stiborState.status === "stale"
+                  ? `Sist vellykket: ${formatDateTimeShort(stiborState.fetchedAt)}`
+                  : stiborState.status === "empty"
+                    ? "Kjør update-stibor"
+                    : stiborState.status === "loading"
+                      ? "Leser Supabase"
+                      : "Ingen verdi"
             }
             accent="cyan"
             icon={<CircleDollarSign size={17} />}

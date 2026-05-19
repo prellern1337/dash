@@ -1,25 +1,24 @@
-# Marked Dashboard PWA — SEB swaps live
+# Marked Dashboard PWA — STIBOR Supabase update
 
-Denne pakken kobler SEB swap-tilene til et nytt API-endepunkt:
+Denne pakken flytter STIBOR over på samme robuste modell som NIBOR:
 
-```text
-/api/swaps
-```
+- `/api/update-stibor`
+  - henter 3M STIBOR fra SFBF
+  - lagrer verdi i Supabase som `stibor_3m`
+  - lagrer feilstatus hvis henting/parsing feiler
 
-Det henter `Swap [NOK]` og `Swap [SEK]` fra SEB-siden og trekker ut:
+- `/api/stibor`
+  - leser siste vellykkede `stibor_3m` fra Supabase
 
-- 3 Yr
-- 5 Yr
-- 10 Yr
+- `/api/update-rates`
+  - kjører både `/api/update-nibor` og `/api/update-stibor`
 
-Dashboardet kaller `/api/swaps` ved pageload.
+- `vercel.json`
+  - har én cron-jobb: `/api/update-rates` hver dag kl. 08:30 UTC
 
 ## Test etter deploy
 
-1. `/api/health` skal vise `package: seb-swaps-live`
-2. `/api/swaps` skal returnere JSON med `data.NOK.rates` og `data.SEK.rates`
-3. Hvis parsing feiler, test `/api/debug-seb-swaps`
-
-## NIBOR
-
-NIBOR er fortsatt basert på SpareBank 1 Markets + Supabase.
+1. `/api/health`
+2. `/api/update-stibor`
+3. `/api/stibor`
+4. `/api/update-rates`

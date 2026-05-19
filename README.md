@@ -1,51 +1,32 @@
-# Marked Dashboard PWA — clean full package
+# Marked Dashboard PWA — SB1 NIBOR source
 
-Dette er en komplett, ryddet prosjektpakke. Den skal brukes for å overskrive filer som kan ha blitt blandet i GitHub.
+Denne pakken bruker SpareBank 1 Markets Morgenrapport Renter og Valuta som praktisk åpen kilde for 3M NIBOR.
 
-## Viktig
+## NIBOR-flyt
 
-Denne pakken har bevisst ikke `vercel.json`. Cron legges tilbake etter at API-ene fungerer stabilt.
+- `/api/update-nibor`
+  - henter PDF fra SpareBank 1 Markets
+  - parser 3M NIBOR
+  - lagrer resultatet i Supabase-tabellen `market_metrics`
+  - lagrer feilstatus hvis henting/parsing feiler, men overskriver ikke sist vellykkede verdi
 
-## Etter deploy
+- `/api/nibor`
+  - leser siste vellykkede `nibor_3m` fra Supabase
+  - viser `stale` dersom siste kjøring feilet etter siste gode verdi
 
-Test først:
+## Test etter deploy
 
-```text
-/api/health
-```
-
-Deretter:
-
-```text
-/api/debug-union-nibor
-```
-
-Og så:
-
-```text
-/api/update-nibor
-/api/nibor
-```
+1. `/api/health`
+2. `/api/update-nibor`
+3. `/api/nibor`
 
 ## Environment variables i Vercel
-
-Kreves for Supabase/API-lagring:
 
 ```text
 SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
 ```
 
-## Filer som må ligge i repo root
+## Cron
 
-```text
-api/
-public/
-src/
-index.html
-package.json
-postcss.config.js
-tailwind.config.js
-vite.config.js
-README.md
-```
+Ingen `vercel.json` i denne pakken. Når manuell test fungerer, kan vi legge til ukentlig cron etterpå.

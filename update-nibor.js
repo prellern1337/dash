@@ -1,49 +1,31 @@
-const LAST_VERIFIED_STIBOR_3M = {
-  value: 2.003,
-  date: "2026-05-15",
-  sourceName: "SFBF",
-  sourceUrl: "https://swfbf.se/stibor/rates/",
-  method: "last_verified_fallback",
-  note: "Sist verifiserte verdi fra SFBF-tabellen: 15 May 2026, 3 Months, 2.003.",
-};
+const UNION_SEGMENTS = [
+  {
+    id: "office",
+    label: "Kontor",
+    url: "https://m2.union.no/segmenter/kontor",
+  },
+  {
+    id: "retail",
+    label: "Handel",
+    url: "https://m2.union.no/segmenter/handel",
+  },
+  {
+    id: "logistics",
+    label: "Logistikk",
+    url: "https://m2.union.no/segmenter/logistikk",
+  },
+];
 
 function parseNumber(value) {
   if (typeof value === "number") return value;
   if (typeof value !== "string") return Number.NaN;
-  return Number.parseFloat(value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, ""));
-}
 
-function normaliseDate(value) {
-  if (!value) return null;
-
-  const text = String(value).trim();
-
-  const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
-  if (isoMatch) return isoMatch[0];
-
-  const dateMatch = text.match(/(\d{1,2})\s+([A-Za-zÅÄÖåäö]+)\s+(\d{4})/);
-  if (!dateMatch) return text;
-
-  const [, day, monthName, year] = dateMatch;
-  const monthMap = {
-    jan: "01", january: "01", januari: "01",
-    feb: "02", february: "02", februari: "02",
-    mar: "03", march: "03", mars: "03",
-    apr: "04", april: "04",
-    may: "05", maj: "05",
-    jun: "06", june: "06", juni: "06",
-    jul: "07", july: "07", juli: "07",
-    aug: "08", august: "08",
-    sep: "09", sept: "09", september: "09",
-    oct: "10", october: "10", okt: "10", oktober: "10",
-    nov: "11", november: "11",
-    dec: "12", december: "12",
-  };
-
-  const month = monthMap[monthName.toLowerCase()];
-  if (!month) return text;
-
-  return `${year}-${month}-${String(day).padStart(2, "0")}`;
+  return Number.parseFloat(
+    value
+      .replace(/\s/g, "")
+      .replace(",", ".")
+      .replace(/[^\d.-]/g, "")
+  );
 }
 
 function htmlToText(html) {
@@ -53,51 +35,44 @@ function htmlToText(html) {
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
-    .replace(/&#8211;/g, "-")
-    .replace(/&#8212;/g, "-")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-function extractStibor3mFromSfbfHtml(html) {
+function extractPrimeYield(html) {
   const text = htmlToText(html);
 
-  const tableRowPattern =
-    /(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})\s+3\s*Months?\s+([-+]?\d+(?:[.,]\d+)?)/i;
+  const strictPattern =
+    /Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?\s+Kilde:\s*UNION\s+per\s+([^#]+?)(?=\s+#|\s+Toppleie|\s+Sekundær|\s+Privat|\s+Normal|\s+Våre|\s*$)/i;
 
-  const tableRowMatch = text.match(tableRowPattern);
-  if (tableRowMatch) {
-    const value = parseNumber(tableRowMatch[2]);
+  const strictMatch = text.match(strictPattern);
+  if (strictMatch) {
+    const value = parseNumber(strictMatch[1]);
     if (Number.isFinite(value)) {
       return {
         value,
-        date: normaliseDate(tableRowMatch[1]),
+        period: strictMatch[2].trim().replace(/\.$/, ""),
       };
     }
   }
 
-  const loosePattern =
-    /3\s*Months?[^0-9+-]{0,80}([-+]?\d+(?:[.,]\d+)?)/i;
-
+  const loosePattern = /Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?/i;
   const looseMatch = text.match(loosePattern);
   if (looseMatch) {
     const value = parseNumber(looseMatch[1]);
-    const nearbyDate = text.match(/(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})/);
     if (Number.isFinite(value)) {
       return {
         value,
-        date: nearbyDate ? normaliseDate(nearbyDate[1]) : null,
+        period: null,
       };
     }
   }
 
-  throw new Error("Fant ikke raden for 3 Months STIBOR på SFBF-siden.");
+  throw new Error("Fant ikke Prime yield på UNION M2-siden.");
 }
 
-async function fetchFromSfbf() {
-  const sourceUrl = "https://swfbf.se/stibor/rates/";
-
-  const response = await fetch(sourceUrl, {
+async function fetchUnionSegment(segment) {
+  const response = await fetch(segment.url, {
     headers: {
       Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
@@ -106,53 +81,92 @@ async function fetchFromSfbf() {
   });
 
   if (!response.ok) {
-    throw new Error(`SFBF svarte med ${response.status}.`);
+    throw new Error(`UNION M2 svarte med ${response.status} for ${segment.label}.`);
   }
 
   const html = await response.text();
-  const observation = extractStibor3mFromSfbfHtml(html);
+  const observation = extractPrimeYield(html);
 
   return {
+    id: segment.id,
+    label: segment.label,
+    source: "UNION",
+    sourceUrl: segment.url,
     value: observation.value,
-    date: observation.date,
-    sourceName: "SFBF",
-    sourceUrl,
-    method: "scrape",
+    period: observation.period,
+    status: "ok",
+  };
+}
+
+function emptySegment(id, label) {
+  return {
+    id,
+    label,
+    value: null,
+    period: null,
+    source: "UNION",
+    sourceUrl: UNION_SEGMENTS.find((segment) => segment.id === id)?.url,
+    status: "error",
   };
 }
 
 export default async function handler(request, response) {
-  try {
-    const stibor = await fetchFromSfbf();
+  const fetchedAt = new Date().toISOString();
 
-    response.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
+  try {
+    const settled = await Promise.allSettled(
+      UNION_SEGMENTS.map((segment) => fetchUnionSegment(segment))
+    );
+
+    const data = {};
+    const errors = [];
+
+    settled.forEach((result, index) => {
+      const segment = UNION_SEGMENTS[index];
+
+      if (result.status === "fulfilled") {
+        data[segment.id] = result.value;
+      } else {
+        data[segment.id] = emptySegment(segment.id, segment.label);
+        errors.push(
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason)
+        );
+      }
+    });
+
+    const hasAnyValue = Object.values(data).some((segment) =>
+      Number.isFinite(Number(segment.value))
+    );
+
+    if (!hasAnyValue) {
+      throw new Error(errors.join(" | ") || "Kunne ikke hente UNION M2-yielder.");
+    }
+
+    response.setHeader("Cache-Control", "s-maxage=21600, stale-while-revalidate=604800");
     response.status(200).json({
-      status: "ok",
-      tenor: "3M",
-      currency: "SEK",
-      value: stibor.value,
-      date: stibor.date,
-      unit: "%",
-      sourceName: stibor.sourceName,
-      sourceUrl: stibor.sourceUrl,
-      method: stibor.method,
-      fetchedAt: new Date().toISOString(),
+      status: errors.length ? "partial" : "ok",
+      sourceName: "UNION M2",
+      fetchedAt,
+      nextSuggestedUpdate: "Onsdag ettermiddag",
+      data,
+      errors,
     });
   } catch (error) {
-    response.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=86400");
-    response.status(200).json({
-      status: "fallback",
-      tenor: "3M",
-      currency: "SEK",
-      value: LAST_VERIFIED_STIBOR_3M.value,
-      date: LAST_VERIFIED_STIBOR_3M.date,
-      unit: "%",
-      sourceName: "SFBF",
-      sourceUrl: LAST_VERIFIED_STIBOR_3M.sourceUrl,
-      method: LAST_VERIFIED_STIBOR_3M.method,
-      fetchedAt: new Date().toISOString(),
-      message: error instanceof Error ? error.message : "Ukjent feil ved henting av STIBOR.",
-      note: LAST_VERIFIED_STIBOR_3M.note,
+    response.status(500).json({
+      status: "error",
+      sourceName: "UNION M2",
+      fetchedAt,
+      message:
+        error instanceof Error
+          ? error.message
+          : "Ukjent feil ved henting av UNION M2-yielder.",
+      data: {
+        office: emptySegment("office", "Kontor"),
+        retail: emptySegment("retail", "Handel"),
+        logistics: emptySegment("logistics", "Logistikk"),
+      },
     });
   }
 }

@@ -1,197 +1,158 @@
-const CURRENCIES = ["EUR", "USD", "SEK"];
-
-function toIsoDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function parseCsvLine(line) {
-  const cells = [];
-  let current = "";
-  let insideQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    const next = line[i + 1];
-
-    if (char === '"' && insideQuotes && next === '"') {
-      current += '"';
-      i += 1;
-      continue;
-    }
-
-    if (char === '"') {
-      insideQuotes = !insideQuotes;
-      continue;
-    }
-
-    if (char === ";" && !insideQuotes) {
-      cells.push(current.trim());
-      current = "";
-      continue;
-    }
-
-    current += char;
-  }
-
-  cells.push(current.trim());
-  return cells;
-}
+const LAST_VERIFIED_STIBOR_3M = {
+  value: 2.003,
+  date: "2026-05-15",
+  sourceName: "SFBF",
+  sourceUrl: "https://swfbf.se/stibor/rates/",
+  method: "last_verified_fallback",
+  note: "Sist verifiserte verdi fra SFBF-tabellen: 15 May 2026, 3 Months, 2.003.",
+};
 
 function parseNumber(value) {
-  if (typeof value !== "string") return Number(value);
-  const cleaned = value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, "");
-  return Number.parseFloat(cleaned);
+  if (typeof value === "number") return value;
+  if (typeof value !== "string") return Number.NaN;
+  return Number.parseFloat(value.replace(/\s/g, "").replace(",", ".").replace(/[^\d.-]/g, ""));
 }
 
-function downsample(series, maxPoints = 140) {
-  if (series.length <= maxPoints) return series;
-  const step = (series.length - 1) / (maxPoints - 1);
-  const sampled = [];
+function normaliseDate(value) {
+  if (!value) return null;
 
-  for (let i = 0; i < maxPoints; i += 1) {
-    sampled.push(series[Math.round(i * step)]);
-  }
+  const text = String(value).trim();
 
-  return sampled;
+  const isoMatch = text.match(/\d{4}-\d{2}-\d{2}/);
+  if (isoMatch) return isoMatch[0];
+
+  const dateMatch = text.match(/(\d{1,2})\s+([A-Za-zÅÄÖåäö]+)\s+(\d{4})/);
+  if (!dateMatch) return text;
+
+  const [, day, monthName, year] = dateMatch;
+  const monthMap = {
+    jan: "01", january: "01", januari: "01",
+    feb: "02", february: "02", februari: "02",
+    mar: "03", march: "03", mars: "03",
+    apr: "04", april: "04",
+    may: "05", maj: "05",
+    jun: "06", june: "06", juni: "06",
+    jul: "07", july: "07", juli: "07",
+    aug: "08", august: "08",
+    sep: "09", sept: "09", september: "09",
+    oct: "10", october: "10", okt: "10", oktober: "10",
+    nov: "11", november: "11",
+    dec: "12", december: "12",
+  };
+
+  const month = monthMap[monthName.toLowerCase()];
+  if (!month) return text;
+
+  return `${year}-${month}-${String(day).padStart(2, "0")}`;
 }
 
-function findObservationClosestToOrBefore(series, targetDate) {
-  const target = targetDate.getTime();
-
-  for (let i = series.length - 1; i >= 0; i -= 1) {
-    const time = new Date(series[i].date).getTime();
-    if (time <= target) return series[i];
-  }
-
-  return series[0];
+function htmlToText(html) {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#8211;/g, "-")
+    .replace(/&#8212;/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function normaliseRowsFromCsv(csvText) {
-  const lines = csvText
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
+function extractStibor3mFromSfbfHtml(html) {
+  const text = htmlToText(html);
 
-  if (lines.length < 2) {
-    throw new Error("Norges Bank returnerte ingen observasjoner.");
+  const tableRowPattern =
+    /(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})\s+3\s*Months?\s+([-+]?\d+(?:[.,]\d+)?)/i;
+
+  const tableRowMatch = text.match(tableRowPattern);
+  if (tableRowMatch) {
+    const value = parseNumber(tableRowMatch[2]);
+    if (Number.isFinite(value)) {
+      return {
+        value,
+        date: normaliseDate(tableRowMatch[1]),
+      };
+    }
   }
 
-  const header = parseCsvLine(lines[0]).map((cell) => cell.replace(/^\uFEFF/, "").trim());
+  const loosePattern =
+    /3\s*Months?[^0-9+-]{0,80}([-+]?\d+(?:[.,]\d+)?)/i;
 
-  const baseIdx = header.indexOf("BASE_CUR") >= 0 ? header.indexOf("BASE_CUR") : 2;
-  const unitMultIdx = header.indexOf("UNIT_MULT") >= 0 ? header.indexOf("UNIT_MULT") : 10;
-  const dateIdx = header.indexOf("TIME_PERIOD") >= 0 ? header.indexOf("TIME_PERIOD") : 14;
-  const valueIdx = header.indexOf("OBS_VALUE") >= 0 ? header.indexOf("OBS_VALUE") : 15;
-
-  const grouped = new Map();
-
-  for (const line of lines.slice(1)) {
-    const cells = parseCsvLine(line);
-    const baseCurrency = cells[baseIdx];
-    const date = cells[dateIdx];
-    const rawValue = parseNumber(cells[valueIdx]);
-    const unitMultiplier = Number.parseInt(cells[unitMultIdx] || "0", 10);
-
-    if (!baseCurrency || !date || Number.isNaN(rawValue)) continue;
-
-    // Some currencies, including SEK/DKK, are quoted per 100 units by Norges Bank.
-    // UNIT_MULT = 2 means "hundreds". We normalise to NOK per 1 currency unit.
-    const normalisedValue = rawValue / Math.pow(10, Number.isNaN(unitMultiplier) ? 0 : unitMultiplier);
-
-    if (!grouped.has(baseCurrency)) grouped.set(baseCurrency, []);
-    grouped.get(baseCurrency).push({
-      date,
-      value: normalisedValue,
-      rawValue,
-      unitMultiplier: Number.isNaN(unitMultiplier) ? 0 : unitMultiplier,
-    });
+  const looseMatch = text.match(loosePattern);
+  if (looseMatch) {
+    const value = parseNumber(looseMatch[1]);
+    const nearbyDate = text.match(/(\d{1,2}\s+[A-Za-zÅÄÖåäö]+\s+\d{4})/);
+    if (Number.isFinite(value)) {
+      return {
+        value,
+        date: nearbyDate ? normaliseDate(nearbyDate[1]) : null,
+      };
+    }
   }
 
-  for (const [currency, rows] of grouped.entries()) {
-    rows.sort((a, b) => a.date.localeCompare(b.date));
-    grouped.set(currency, rows);
-  }
-
-  return grouped;
+  throw new Error("Fant ikke raden for 3 Months STIBOR på SFBF-siden.");
 }
 
-async function fetchNorgesBankFx() {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setFullYear(startDate.getFullYear() - 3);
-  startDate.setDate(startDate.getDate() - 10);
-
-  const startPeriod = toIsoDate(startDate);
-  const endPeriod = toIsoDate(endDate);
-  const currencyKey = CURRENCIES.join("%2B");
-
-  const sourceUrl = `https://data.norges-bank.no/api/data/EXR/B.${currencyKey}.NOK.SP?bom=include&format=csv&locale=en&startPeriod=${startPeriod}&endPeriod=${endPeriod}`;
+async function fetchFromSfbf() {
+  const sourceUrl = "https://swfbf.se/stibor/rates/";
 
   const response = await fetch(sourceUrl, {
     headers: {
-      Accept: "text/csv",
-      "User-Agent": "MarketDashboardPWA/1.0",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+      "Cache-Control": "no-cache",
     },
   });
 
   if (!response.ok) {
-    throw new Error(`Norges Bank API svarte med ${response.status}.`);
+    throw new Error(`SFBF svarte med ${response.status}.`);
   }
 
-  const csvText = await response.text();
-  const grouped = normaliseRowsFromCsv(csvText);
-  const target30d = new Date();
-  target30d.setDate(target30d.getDate() - 30);
-
-  const pairs = CURRENCIES.map((currency) => {
-    const series = grouped.get(currency) || [];
-
-    if (series.length === 0) {
-      throw new Error(`Mangler valutadata for ${currency}/NOK.`);
-    }
-
-    const latest = series[series.length - 1];
-    const point30d = findObservationClosestToOrBefore(series, target30d);
-
-    // Positive means NOK has strengthened. Negative means NOK has weakened.
-    const change30dNok = ((point30d.value / latest.value) - 1) * 100;
-
-    return {
-      name: `${currency}/NOK`,
-      value: latest.value,
-      date: latest.date,
-      change30dNok,
-      rawValue: latest.rawValue,
-      unitMultiplier: latest.unitMultiplier,
-      series3y: downsample(series.map((point) => ({
-        date: point.date,
-        value: point.value,
-      }))),
-    };
-  });
+  const html = await response.text();
+  const observation = extractStibor3mFromSfbfHtml(html);
 
   return {
-    status: "ok",
-    sourceName: "Norges Bank",
+    value: observation.value,
+    date: observation.date,
+    sourceName: "SFBF",
     sourceUrl,
-    fetchedAt: new Date().toISOString(),
-    pairs,
+    method: "scrape",
   };
 }
 
 export default async function handler(request, response) {
   try {
-    const payload = await fetchNorgesBankFx();
+    const stibor = await fetchFromSfbf();
 
     response.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=86400");
-    response.status(200).json(payload);
-  } catch (error) {
-    response.status(500).json({
-      status: "error",
-      sourceName: "Norges Bank",
+    response.status(200).json({
+      status: "ok",
+      tenor: "3M",
+      currency: "SEK",
+      value: stibor.value,
+      date: stibor.date,
+      unit: "%",
+      sourceName: stibor.sourceName,
+      sourceUrl: stibor.sourceUrl,
+      method: stibor.method,
       fetchedAt: new Date().toISOString(),
-      message: error instanceof Error ? error.message : "Ukjent feil ved henting av valutakurser.",
+    });
+  } catch (error) {
+    response.setHeader("Cache-Control", "s-maxage=1800, stale-while-revalidate=86400");
+    response.status(200).json({
+      status: "fallback",
+      tenor: "3M",
+      currency: "SEK",
+      value: LAST_VERIFIED_STIBOR_3M.value,
+      date: LAST_VERIFIED_STIBOR_3M.date,
+      unit: "%",
+      sourceName: "SFBF",
+      sourceUrl: LAST_VERIFIED_STIBOR_3M.sourceUrl,
+      method: LAST_VERIFIED_STIBOR_3M.method,
+      fetchedAt: new Date().toISOString(),
+      message: error instanceof Error ? error.message : "Ukjent feil ved henting av STIBOR.",
+      note: LAST_VERIFIED_STIBOR_3M.note,
     });
   }
 }

@@ -1,4 +1,4 @@
-import { insertMetric, getLatestMetric } from "./_lib/supabase.js";
+import { insertMetric, getLatestMetric } from "../lib/supabase.js";
 
 const METRIC_KEY = "stibor_3m";
 const RIKSBANK_SERIES_ID = "SEDP3MSTIBORDELAYC";

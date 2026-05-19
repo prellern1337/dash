@@ -1,4 +1,4 @@
-import { getLatestMetric } from "./_lib/supabase.js";
+import { getLatestMetric } from "../lib/supabase.js";
 
 const METRIC_KEY = "nibor_3m";
 

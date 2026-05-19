@@ -1,5 +1,5 @@
 import { createRequire } from "module";
-import { getLatestMetric, insertMetric } from "./_lib/supabase.js";
+import { getLatestMetric, insertMetric } from "../lib/supabase.js";
 
 const require = createRequire(import.meta.url);
 const METRIC_KEY = "nibor_3m";

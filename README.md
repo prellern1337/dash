@@ -1,18 +1,30 @@
-# Marked Dashboard PWA — STIBOR Riksbank primary
+# Marked Dashboard PWA — serverless limit fix
 
-Denne pakken endrer STIBOR-oppdateringen:
+Denne pakken rydder opp i Vercel Hobby-begrensningen på antall serverless functions.
 
-- Primærkilde: Riksbankens åpne API-serie `SEDP3MSTIBORDELAYC`
-- Sekundærkilde: SFBF public STIBOR-side, hvis den ikke rate-limiter
-- `/api/update-stibor` lagrer ny `stibor_3m` i Supabase
-- `/api/stibor` leser siste vellykkede verdi fra Supabase
-- `/api/update-rates` kjører både NIBOR og STIBOR
-- `/api/debug-riksbank-stibor` kan brukes hvis API-parseren må debugges
+## Endringer
+
+- Fjernet midlertidige debug-endepunkter:
+  - `/api/debug-seb-swaps`
+  - `/api/debug-riksbank-stibor`
+  - `/api/debug-union-nibor`
+  - `/api/version`
+- Flyttet Supabase-helper ut av `api/_lib` til `lib/supabase.js`
+- Oppdaterte imports i API-filene
+- Beholder production-endepunktene:
+  - `/api/health`
+  - `/api/fx`
+  - `/api/swaps`
+  - `/api/yields`
+  - `/api/nibor`
+  - `/api/stibor`
+  - `/api/update-nibor`
+  - `/api/update-stibor`
+  - `/api/update-rates`
 
 ## Test etter deploy
 
 1. `/api/health`
-2. `/api/debug-riksbank-stibor`
-3. `/api/update-stibor`
-4. `/api/stibor`
-5. `/api/update-rates`
+2. `/api/update-stibor`
+3. `/api/stibor`
+4. `/api/update-rates`

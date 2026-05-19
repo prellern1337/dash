@@ -89,33 +89,22 @@ const fallbackStibor = {
   note: null,
 };
 
-const fallbackSwapState = {
+const fallbackNibor = {
   status: "loading",
-  sourceName: "SEB",
-  sourceUrl: "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates",
+  sourceName: "UNION Nøkkeltall",
+  sourceUrl: "https://union.no/analyse",
+  value: null,
+  unit: "%",
+  sourceDocument: null,
+  observedDate: null,
   fetchedAt: null,
   message: null,
-  data: {
-    NOK: {
-      label: "Norge",
-      currency: "NOK",
-      source: "SEB",
-      status: "loading",
-      rates: { "3Y": null, "5Y": null, "10Y": null },
-    },
-    SEK: {
-      label: "Sverige",
-      currency: "SEK",
-      source: "SEB",
-      status: "loading",
-      rates: { "3Y": null, "5Y": null, "10Y": null },
-    },
-  },
+  lastRun: null,
 };
 
 const fallbackYieldState = {
   status: "loading",
-  sourceName: "UNION M2 / Newsec",
+  sourceName: "UNION M2",
   fetchedAt: null,
   message: null,
   data: {
@@ -123,31 +112,28 @@ const fallbackYieldState = {
       id: "office",
       label: "Kontor",
       value: null,
-      sources: [
-        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/kontor" },
-        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
-        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
-      ],
+      period: null,
+      source: "UNION",
+      sourceUrl: "https://m2.union.no/segmenter/kontor",
+      status: "loading",
     },
     retail: {
       id: "retail",
       label: "Handel",
       value: null,
-      sources: [
-        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/handel" },
-        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
-        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
-      ],
+      period: null,
+      source: "UNION",
+      sourceUrl: "https://m2.union.no/segmenter/handel",
+      status: "loading",
     },
     logistics: {
       id: "logistics",
       label: "Logistikk",
       value: null,
-      sources: [
-        { source: "UNION", value: null, status: "loading", sourceUrl: "https://m2.union.no/segmenter/logistikk" },
-        { source: "Newsec", value: null, status: "loading", sourceUrl: "https://www.newsec.no/insights/reports/yieldtabell" },
-        { source: "Akershus", value: null, status: "not_connected", sourceUrl: "https://akershuseiendom.no/markedsinnsikt/nokkeltall" },
-      ],
+      period: null,
+      source: "UNION",
+      sourceUrl: "https://m2.union.no/segmenter/logistikk",
+      status: "loading",
     },
   },
 };
@@ -155,11 +141,6 @@ const fallbackYieldState = {
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
-  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
-  return formatPercent(Number(value));
-}
-
-function formatOptionalRate(value) {
   if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
   return formatPercent(Number(value));
 }
@@ -400,30 +381,30 @@ function FxOverlay({ pair, onClose }) {
   );
 }
 
-function getYieldSource(segment, sourceName) {
-  return segment?.sources?.find((source) => source.source === sourceName) || { value: null, status: "not_connected" };
-}
-
-function getSourceStatusLabel(status) {
-  if (status === "ok") return "Live";
-  if (status === "auto") return "Auto";
-  if (status === "stale") return "Forrige auto";
-  if (status === "seed") return "Seed";
-  if (status === "last_verified") return "Siste verif.";
-  if (status === "loading") return "Henter";
-  if (status === "not_connected") return "Ikke koblet";
-  return "Feil";
-}
-
 function YieldOverlay({ onClose, yieldState }) {
-  const sourceNames = ["UNION", "Newsec", "Akershus"];
-
-  const rows = sourceNames.map((sourceName) => ({
-    source: sourceName,
-    office: getYieldSource(yieldState.data.office, sourceName),
-    retail: getYieldSource(yieldState.data.retail, sourceName),
-    logistics: getYieldSource(yieldState.data.logistics, sourceName),
-  }));
+  const rows = [
+    {
+      source: "UNION",
+      status: yieldState.status === "loading" ? "Henter" : yieldState.status === "error" ? "Feil" : "Live",
+      office: yieldState.data.office,
+      retail: yieldState.data.retail,
+      logistics: yieldState.data.logistics,
+    },
+    {
+      source: "Newsec",
+      status: "Ikke koblet",
+      office: { value: null },
+      retail: { value: null },
+      logistics: { value: null },
+    },
+    {
+      source: "Akershus",
+      status: "Ikke koblet",
+      office: { value: null },
+      retail: { value: null },
+      logistics: { value: null },
+    },
+  ];
 
   return (
     <Overlay
@@ -432,7 +413,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Snittet beregnes av automatisk oppdatert yield-data fra UNION, Newsec og Akershus. Jobben kjøres omtrent annenhver uke.
+            UNION M2 hentes live. Newsec og Akershus kobles på senere.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -440,12 +421,12 @@ function YieldOverlay({ onClose, yieldState }) {
     >
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
-          ? `Sist oppdatert yield-data: ${formatDateTimeShort(yieldState.fetchedAt)}`
+          ? `Sist hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
           : yieldState.status === "partial"
-            ? `Yield-data delvis oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.message || ""}`
+            ? `Delvis hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
             : yieldState.status === "loading"
-              ? "Henter yielder fra UNION M2 og Newsec..."
-              : `Kunne ikke hente yielder: ${yieldState.message || "Ukjent feil"}`}
+              ? "Henter UNION M2-yielder..."
+              : `Kunne ikke hente UNION M2: ${yieldState.message || "Ukjent feil"}`}
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-stone-100">
@@ -459,39 +440,17 @@ function YieldOverlay({ onClose, yieldState }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => {
-              const statuses = [row.office.status, row.retail.status, row.logistics.status];
-              const statusLabel = statuses.includes("auto") || statuses.includes("ok")
-                ? "Auto"
-                : statuses.includes("stale")
-                  ? "Forrige auto"
-                  : statuses.includes("seed")
-                    ? "Seed"
-                    : statuses.includes("last_verified")
-                      ? "Siste verif."
-                      : getSourceStatusLabel(row.office.status);
-
-              return (
-                <tr key={row.source} className="border-t border-stone-100">
-                  <td className="px-3 py-3">
-                    <div className="font-medium text-stone-800">{row.source}</div>
-                    <div className="mt-0.5 text-[10px] text-stone-400">{statusLabel}</div>
-                  </td>
-                  <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office.value)}</td>
-                  <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail.value)}</td>
-                  <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics.value)}</td>
-                </tr>
-              );
-            })}
-            <tr className="border-t border-stone-200 bg-stone-50 font-semibold">
-              <td className="px-3 py-3 text-stone-950">
-                <div>Snitt</div>
-                <div className="mt-0.5 text-[10px] font-normal text-stone-400">Koblede kilder</div>
-              </td>
-              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.office.value)}</td>
-              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.retail.value)}</td>
-              <td className="px-3 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.logistics.value)}</td>
-            </tr>
+            {rows.map((row) => (
+              <tr key={row.source} className="border-t border-stone-100">
+                <td className="px-3 py-3">
+                  <div className="font-medium text-stone-800">{row.source}</div>
+                  <div className="mt-0.5 text-[10px] text-stone-400">{row.status}</div>
+                </td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office.value)}</td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail.value)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics.value)}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -512,7 +471,7 @@ export default function MarketDashboardPrototype() {
     message: null,
   });
   const [stiborState, setStiborState] = useState(fallbackStibor);
-  const [swapState, setSwapState] = useState(fallbackSwapState);
+  const [niborState, setNiborState] = useState(fallbackNibor);
   const [yieldState, setYieldState] = useState(fallbackYieldState);
 
   useEffect(() => {
@@ -583,31 +542,35 @@ export default function MarketDashboardPrototype() {
       }
     }
 
-    async function loadSwaps() {
+    async function loadNibor() {
       try {
-        const response = await fetch("/api/swaps");
+        const response = await fetch("/api/nibor");
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
-          throw new Error(payload.errors?.join(" | ") || payload.message || "Kunne ikke hente SEB swap-rates.");
+          throw new Error(payload.message || "Kunne ikke lese 3M NIBOR fra database.");
         }
 
         if (!cancelled) {
-          setSwapState({
-            status: "ok",
-            sourceName: payload.sourceName || "SEB",
-            sourceUrl: payload.sourceUrl || fallbackSwapState.sourceUrl,
-            fetchedAt: payload.fetchedAt,
-            message: null,
-            data: payload.data || fallbackSwapState.data,
+          setNiborState({
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "UNION Nøkkeltall",
+            sourceUrl: payload.sourceUrl || "https://union.no/analyse",
+            value: payload.value,
+            unit: payload.unit || "%",
+            sourceDocument: payload.sourceDocument || null,
+            observedDate: payload.observedDate || null,
+            fetchedAt: payload.fetchedAt || null,
+            message: payload.message || null,
+            lastRun: payload.lastRun || null,
           });
         }
       } catch (error) {
         if (!cancelled) {
-          setSwapState((current) => ({
+          setNiborState((current) => ({
             ...current,
             status: "error",
-            message: error instanceof Error ? error.message : "Kunne ikke hente SEB swap-rates.",
+            message: error instanceof Error ? error.message : "Kunne ikke lese 3M NIBOR.",
           }));
         }
       }
@@ -616,23 +579,16 @@ export default function MarketDashboardPrototype() {
     async function loadYields() {
       try {
         const response = await fetch("/api/yields");
-        const rawText = await response.text();
-
-        let payload;
-        try {
-          payload = JSON.parse(rawText);
-        } catch {
-          throw new Error(`Yield-API returnerte ikke JSON: ${rawText.slice(0, 140)}`);
-        }
+        const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
-          throw new Error(payload.message || "Kunne ikke hente yielder.");
+          throw new Error(payload.message || "Kunne ikke hente UNION M2-yielder.");
         }
 
         if (!cancelled) {
           setYieldState({
             status: payload.status === "partial" ? "partial" : "ok",
-            sourceName: payload.sourceName || "UNION M2 / Newsec",
+            sourceName: payload.sourceName || "UNION M2",
             fetchedAt: payload.fetchedAt,
             message: payload.errors?.length ? payload.errors.join(" | ") : null,
             data: payload.data || fallbackYieldState.data,
@@ -643,7 +599,7 @@ export default function MarketDashboardPrototype() {
           setYieldState((current) => ({
             ...current,
             status: "error",
-            message: error instanceof Error ? error.message : "Kunne ikke hente yielder.",
+            message: error instanceof Error ? error.message : "Kunne ikke hente UNION M2-yielder.",
           }));
         }
       }
@@ -651,7 +607,7 @@ export default function MarketDashboardPrototype() {
 
     loadFx();
     loadStibor();
-    loadSwaps();
+    loadNibor();
     loadYields();
 
     return () => {
@@ -660,30 +616,39 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [fxState.fetchedAt, stiborState.fetchedAt, swapState.fetchedAt, yieldState.fetchedAt]
+    const dates = [fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [fxState.fetchedAt, stiborState.fetchedAt, swapState.fetchedAt, yieldState.fetchedAt]);
+  }, [fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = fxState.status === "error" || stiborState.status === "error" || swapState.status === "error" || yieldState.status === "error";
+  const hasError = fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
-    if (fxState.status === "ok" && stiborState.status === "ok" && swapState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "Marked live" };
+    if (fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
+      return { tone: "good", label: "FX + renter + UNION live" };
+    }
+    if (niborState.status === "stale") {
+      return { tone: "warn", label: "NIBOR sist vellykket" };
+    }
+    if (niborState.status === "empty") {
+      return { tone: "warn", label: "NIBOR ikke initialisert" };
+    }
+    if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "ok") {
+      return { tone: "good", label: "FX + STIBOR + UNION live" };
     }
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "partial") {
-      return { tone: "warn", label: "FX/STIBOR live · yield delvis" };
+      return { tone: "warn", label: "FX/STIBOR live · UNION delvis" };
     }
     if (fxState.status === "ok" && stiborState.status === "fallback" && yieldState.status === "ok") {
-      return { tone: "warn", label: "FX + yield live · STIBOR siste kjente" };
+      return { tone: "warn", label: "FX + UNION live · STIBOR siste kjente" };
     }
     if (hasError) return { tone: "bad", label: "Noen kilder feilet" };
     return { tone: "warn", label: "Henter markedsdata" };
-  }, [fxState.status, stiborState.status, yieldState.status, hasError]);
+  }, [fxState.status, stiborState.status, niborState.status, yieldState.status, hasError]);
 
   const warningContent = useMemo(() => {
     if (fxState.status === "error") {
@@ -700,17 +665,31 @@ export default function MarketDashboardPrototype() {
       };
     }
 
-    if (swapState.status === "error") {
+    if (niborState.status === "error") {
       return {
-        title: "SEB swap feilet",
-        message: `${swapState.message} Langrenter viser tomme verdier til kilden fungerer igjen.`,
+        title: "NIBOR-lesing feilet",
+        message: `${niborState.message} Appen leser NIBOR fra Supabase, ikke fra hardkodet fallback.`,
       };
     }
 
     if (yieldState.status === "error") {
       return {
-        title: "Yield-kilde feilet",
-        message: `${yieldState.message} Prime yield viser tomme verdier for kilder som feiler.`,
+        title: "UNION M2-kilde feilet",
+        message: `${yieldState.message} Prime yield viser tomme verdier til kilden fungerer igjen.`,
+      };
+    }
+
+    if (niborState.status === "empty") {
+      return {
+        title: "NIBOR er ikke initialisert",
+        message: "Kjør /api/update-nibor én gang etter deploy. Deretter leser appen sist vellykkede verdi fra Supabase.",
+      };
+    }
+
+    if (niborState.status === "stale") {
+      return {
+        title: "NIBOR viser sist vellykkede verdi",
+        message: `${niborState.message || "Siste oppdatering feilet."} Viser verdien lagret ${formatDateTimeShort(niborState.fetchedAt)}.`,
       };
     }
 
@@ -723,14 +702,14 @@ export default function MarketDashboardPrototype() {
 
     if (yieldState.status === "partial") {
       return {
-        title: "Yield-kilder delvis hentet",
+        title: "UNION M2 delvis hentet",
         message: yieldState.message || "Minst ett segment mangler fra UNION M2. Appen viser segmentene som ble hentet.",
       };
     }
 
     return {
       title: "Neste datakilder",
-      message: "Akershus Eiendom er ikke koblet på ennå. Den vises derfor som tom i yield-tabellen.",
+      message: "Newsec og Akershus Eiendom er ikke koblet på ennå. De vises derfor som tomme i yield-tabellen.",
     };
   }, [
     fxState.status,
@@ -739,8 +718,9 @@ export default function MarketDashboardPrototype() {
     stiborState.message,
     stiborState.value,
     stiborState.date,
-    swapState.status,
-    swapState.message,
+    niborState.status,
+    niborState.message,
+    niborState.fetchedAt,
     yieldState.status,
     yieldState.message,
   ]);
@@ -804,48 +784,46 @@ export default function MarketDashboardPrototype() {
 
         <section className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
-          <Pill>{yieldState.status === "ok" ? "Yield auto" : yieldState.status === "seed" ? "Yield seed" : yieldState.status === "loading" ? "Henter yield" : "Delvis/fallback"}</Pill>
+          <Pill>{niborState.status === "ok" && yieldState.status === "ok" ? "UNION live" : niborState.status === "loading" || yieldState.status === "loading" ? "Henter UNION" : "Delvis/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">
-          <Tile
-            title="Norge"
-            source={swapState.status === "ok" ? "SEB live" : swapState.status === "loading" ? "Henter SEB" : "SEB feil"}
-            accent="violet"
-            icon={<TrendingUp size={17} />}
-            size="large"
-          >
+          <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large">
             <RateStack
               rows={[
-                { label: "3Y swap", value: formatOptionalRate(swapState.data.NOK.rates["3Y"]) },
-                { label: "5Y swap", value: formatOptionalRate(swapState.data.NOK.rates["5Y"]) },
-                { label: "10Y swap", value: formatOptionalRate(swapState.data.NOK.rates["10Y"]) },
+                { label: "3Y swap", value: "4,12 %" },
+                { label: "5Y swap", value: "4,05 %" },
+                { label: "10Y swap", value: "4,02 %" },
               ]}
             />
           </Tile>
 
-          <Tile
-            title="Sverige"
-            source={swapState.status === "ok" ? "SEB live" : swapState.status === "loading" ? "Henter SEB" : "SEB feil"}
-            accent="blue"
-            icon={<TrendingUp size={17} />}
-            size="large"
-          >
+          <Tile title="Sverige" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large">
             <RateStack
               rows={[
-                { label: "3Y swap", value: formatOptionalRate(swapState.data.SEK.rates["3Y"]) },
-                { label: "5Y swap", value: formatOptionalRate(swapState.data.SEK.rates["5Y"]) },
-                { label: "10Y swap", value: formatOptionalRate(swapState.data.SEK.rates["10Y"]) },
+                { label: "3Y swap", value: "2,83 %" },
+                { label: "5Y swap", value: "2,92 %" },
+                { label: "10Y swap", value: "3,07 %" },
               ]}
             />
           </Tile>
 
           <Tile
             title="3M NIBOR"
-            source="UNION"
-            value="4,67"
+            source={niborState.sourceName}
+            value={hasNumericValue(niborState.value) ? formatNumber(niborState.value, 2) : "—"}
             unit="%"
-            subtitle="Ukentlig publisert verdi"
+            subtitle={
+              niborState.status === "ok"
+                ? niborState.sourceDocument || `Lagret: ${formatDateTimeShort(niborState.fetchedAt)}`
+                : niborState.status === "stale"
+                  ? `Sist vellykket: ${formatDateTimeShort(niborState.fetchedAt)}`
+                  : niborState.status === "empty"
+                    ? "Kjør update-nibor"
+                    : niborState.status === "loading"
+                      ? "Leser Supabase"
+                      : "Ingen verdi"
+            }
             accent="amber"
             icon={<CircleDollarSign size={17} />}
           />
@@ -885,7 +863,7 @@ export default function MarketDashboardPrototype() {
 
           <Tile
             title="Prime yield"
-            source="Snitt"
+            source="UNION M2"
             accent="slate"
             icon={<Building2 size={17} />}
             onClick={() => setShowYield(true)}
@@ -911,7 +889,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          Valuta, 3M STIBOR og SEB swap hentes via API ved app-lasting. Yield-data leses fra automatisk oppdatert JSON. 3M NIBOR kobles på senere.
+          Valuta, 3M STIBOR og UNION M2-yielder hentes via Vercel API-funksjoner. 3M NIBOR leses fra Supabase og oppdateres ukentlig via /api/update-nibor.
         </footer>
       </div>
 

@@ -1,19 +1,15 @@
-# Market Dashboard — insider trades timeout fix
+# Market Dashboard — insider trades parse fix
 
-Denne pakken gjør innsidehandel-endepunktet lettere slik at det ikke timeouter på Vercel.
+Denne pakken fikser parseren for innsidehandler:
 
-## Endringer
-
-- `/api/insider-trades?action=update` scraper maks 10 meldinger per kjøring
-- kortere ventetider i headless browser
-- søker 14 dager bakover
-- `/api/health` er fjernet for å holde oss under Vercel Hobby-grensen
+- Leser IssuerID fra selve meldingssiden, ikke søkeresultat-tabellheader.
+- Fikser aksjetall som 1,200 og 9,000 slik at de blir 1200 og 9000.
+- Bruker message body, ikke hele søkeresultatlisten, for parsing av type/stilling/aksjer/pris.
+- Beholder bred tile og overlay.
 
 ## Test
 
 1. Deploy pakken
 2. Kjør `/api/insider-trades?action=update`
 3. Kjør `/api/insider-trades`
-4. Refresh dashboardet
-
-Hvis workflow fortsatt gir 504, må vi splitte jobben i enda mindre steg eller flytte selve NewsWeb-scrapingen til GitHub Actions.
+4. Refresh dashboardet. Hvis tile fortsatt ikke vises, test i inkognito/PWA-cache.

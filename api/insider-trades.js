@@ -1,8 +1,6 @@
 import { insertMetric, getSupabaseAdmin } from "../lib/supabase.js";
 
-export const config = {
-  maxDuration: 60,
-};
+export const config = { maxDuration: 60 };
 
 const METRIC_KEY = "insider_trade";
 const NEWSWEB_BASE = "https://newsweb.oslobors.no";
@@ -22,49 +20,100 @@ function searchUrl(daysBack = 14) {
   const today = new Date();
   const fromDate = toIsoDate(addDays(today, -daysBack));
   const toDate = toIsoDate(today);
-
   return `${NEWSWEB_BASE}/search?category=${CATEGORY}&issuer=&fromDate=${fromDate}&toDate=${toDate}&market=&messageTitle=`;
-}
-
-function parseNumberLoose(value) {
-  if (value === null || value === undefined) return null;
-  const cleaned = String(value)
-    .replace(/\u00a0/g, " ")
-    .replace(/\s/g, "")
-    .replace(",", ".")
-    .replace(/[^\d.-]/g, "");
-
-  if (!cleaned) return null;
-  const number = Number.parseFloat(cleaned);
-  return Number.isFinite(number) ? number : null;
-}
-
-function parseIntegerLoose(value) {
-  const number = parseNumberLoose(value);
-  if (!Number.isFinite(number)) return null;
-  return Math.round(number);
 }
 
 function normaliseWhitespace(text) {
   return String(text || "").replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function parseDecimalNumber(value) {
+  if (value === null || value === undefined) return null;
+
+  let text = String(value).trim().replace(/\u00a0/g, " ").replace(/\s/g, "");
+  const hasComma = text.includes(",");
+  const hasDot = text.includes(".");
+
+  if (hasComma && hasDot) {
+    // Last separator is assumed decimal separator.
+    if (text.lastIndexOf(",") > text.lastIndexOf(".")) {
+      text = text.replace(/\./g, "").replace(",", ".");
+    } else {
+      text = text.replace(/,/g, "");
+    }
+  } else if (hasComma) {
+    const parts = text.split(",");
+    if (parts.length === 2 && parts[1].length === 3 && parts[0].length <= 3) {
+      text = parts.join(""); // 1,200 => 1200
+    } else {
+      text = text.replace(",", ".");
+    }
+  }
+
+  text = text.replace(/[^\d.-]/g, "");
+  if (!text) return null;
+
+  const number = Number.parseFloat(text);
+  return Number.isFinite(number) ? number : null;
+}
+
+function parseShareNumber(value) {
+  if (value === null || value === undefined) return null;
+  let text = String(value).trim().replace(/\u00a0/g, " ");
+
+  // Shares normally use comma/space/dot as thousands separators. Treat 1,200 / 9.000 / 202 739 as integers.
+  text = text.replace(/\s/g, "");
+  if (/^\d{1,3}([,.]\d{3})+$/.test(text)) {
+    text = text.replace(/[,.]/g, "");
+  } else if (text.includes(",")) {
+    // If not a clean thousands separator, take integer part before decimal comma.
+    text = text.split(",")[0];
+  } else if (text.includes(".")) {
+    const parts = text.split(".");
+    if (parts.length === 2 && parts[1].length === 3) text = parts.join("");
+    else text = parts[0];
+  }
+
+  text = text.replace(/[^\d-]/g, "");
+  if (!text) return null;
+
+  const number = Number.parseInt(text, 10);
+  return Number.isFinite(number) ? number : null;
+}
+
 function normaliseDate(value) {
   const text = String(value || "");
-
-  // ISO first
   const iso = text.match(/\b(20\d{2})-(\d{2})-(\d{2})\b/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
 
-  // Norwegian/European date: 21.05.2026 or 21/05/2026
   const eu = text.match(/\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b/);
   if (eu) return `${eu[3]}-${String(eu[2]).padStart(2, "0")}-${String(eu[1]).padStart(2, "0")}`;
+
+  const nordic = text.match(/\b(\d{1,2})\.\s*(januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)\s+(20\d{2})\b/i);
+  if (nordic) {
+    const months = {
+      januar: "01", februar: "02", mars: "03", april: "04", mai: "05", juni: "06",
+      juli: "07", august: "08", september: "09", oktober: "10", november: "11", desember: "12",
+    };
+    return `${nordic[3]}-${months[nordic[2].toLowerCase()]}-${String(nordic[1]).padStart(2, "0")}`;
+  }
 
   return null;
 }
 
 function classifyTradeType(textInput) {
   const text = normaliseWhitespace(textInput).toLowerCase();
+
+  const sellPatterns = [
+    /\bsold\b/,
+    /\bsale\b/,
+    /\bsell\b/,
+    /\bdispos(?:al|ed|es|ing)\b/,
+    /\bavhend(?:et|er)?\b/,
+    /\bsolgt\b/,
+    /\bsalg\b/,
+    /\bselge\b/,
+  ];
 
   const buyPatterns = [
     /\bpurchase[ds]?\b/,
@@ -77,16 +126,6 @@ function classifyTradeType(textInput) {
     /\bsubscribed\b/,
   ];
 
-  const sellPatterns = [
-    /\bsold\b/,
-    /\bsale\b/,
-    /\bsell\b/,
-    /\bdispos(?:al|ed|es|ing)\b/,
-    /\bavhend(?:et|er)?\b/,
-    /\bsolgt\b/,
-    /\bsalg\b/,
-  ];
-
   if (sellPatterns.some((pattern) => pattern.test(text))) return "Salg";
   if (buyPatterns.some((pattern) => pattern.test(text))) return "Kjøp";
   return "—";
@@ -96,17 +135,18 @@ function extractShares(textInput) {
   const text = normaliseWhitespace(textInput);
 
   const patterns = [
-    /(?:purchased|acquired|bought|sold|kjøpt|ervervet|solgt|avhendet)[^.\n]{0,160}?([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
-    /([\d\s.,]+)\s+(?:shares|aksjer)\s+(?:at|til|for|in|i)\b/i,
-    /(?:number of shares|antall aksjer)[^\d]{0,40}([\d\s.,]+)/i,
+    /(?:has\s+)?(?:purchased|acquired|bought|sold|kjøpt|ervervet|solgt|avhendet)[^.\n]{0,160}?([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
+    /([\d\s.,]+)\s+(?:shares|aksjer)\s+(?:in|i|of|av|at|til)\b/i,
+    /(?:number of shares|antall aksjer)[^\d]{0,50}([\d\s.,]+)/i,
+    /(?:utøvd|exercised)[^.\n]{0,120}?([\d\s.,]+)\s+(?:opsjoner|options|shares|aksjer)\b/i,
   ];
 
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (!match) continue;
 
-    const value = parseIntegerLoose(match[1]);
-    if (Number.isFinite(value) && value > 0) return value;
+    const value = parseShareNumber(match[1]);
+    if (Number.isFinite(value) && value > 0 && value < 1000000000) return value;
   }
 
   return null;
@@ -116,8 +156,8 @@ function extractPrice(textInput) {
   const text = normaliseWhitespace(textInput);
 
   const patterns = [
-    /(?:price|subscription price|purchase price|average price)[^.\n]{0,80}?(?:NOK|SEK|USD|EUR)?\s*([-+]?\d+(?:[.,]\d+)?)/i,
-    /(?:kurs|pris)[^.\n]{0,80}?(?:NOK|SEK|USD|EUR)?\s*([-+]?\d+(?:[.,]\d+)?)/i,
+    /(?:price|subscription price|purchase price|average price|exercise price)[^.\n]{0,100}?(?:NOK|SEK|USD|EUR)?\s*([-+]?\d+(?:[.,]\d+)?)/i,
+    /(?:kurs|pris|utøvelseskurs(?:en)?)[^.\n]{0,100}?(?:NOK|SEK|USD|EUR)?\s*([-+]?\d+(?:[.,]\d+)?)/i,
     /(?:at|til)\s+(?:a\s+)?(?:price|kurs|pris)\s+(?:of\s+)?(?:NOK|SEK|USD|EUR)?\s*([-+]?\d+(?:[.,]\d+)?)/i,
     /(?:NOK|SEK|USD|EUR)\s*([-+]?\d+(?:[.,]\d+)?)(?:\s+per\s+share|\s+per\s+aksje)?/i,
   ];
@@ -126,7 +166,7 @@ function extractPrice(textInput) {
     const match = text.match(pattern);
     if (!match) continue;
 
-    const value = parseNumberLoose(match[1]);
+    const value = parseDecimalNumber(match[1]);
     if (Number.isFinite(value) && value >= 0 && value < 100000) return value;
   }
 
@@ -137,8 +177,8 @@ function extractRole(textInput) {
   const text = normaliseWhitespace(textInput);
 
   const rolePatterns = [
-    /\b(CEO|CFO|COO|CTO|Chair(?:man)?|Board member|Member of the Board|Director|Primary insider|Chief [A-Za-zæøåÆØÅ ]{2,50}|Managing Director)\b/i,
-    /\b(Konsernsjef|Finansdirektør|Styreleder|Styremedlem|Primærinnsider|Daglig leder|Administrerende direktør|Investeringsdirektør|Direktør)\b/i,
+    /\b(CEO|CFO|COO|CTO|Chair(?:man)?|Board member|Member of the Board|Director|Primary Insider|Primary insider|Chief [A-Za-zæøåÆØÅ ]{2,50}|Managing Director|Executive Director)\b/i,
+    /\b(Konsernsjef|Finansdirektør|Styreleder|Styremedlem|Primærinnsider|Daglig leder|Administrerende direktør|Investeringsdirektør|Direktør|ansattrepresentant|vara styremedlem)\b/i,
   ];
 
   for (const pattern of rolePatterns) {
@@ -146,33 +186,36 @@ function extractRole(textInput) {
     if (match) return match[1].trim();
   }
 
-  // Common sentence: "X, CEO of Issuer, has..."
-  const commaRole = text.match(/,\s*([^,.]{2,70}?(?:CEO|CFO|board member|styremedlem|styreleder|konsernsjef|finansdirektør|primærinnsider)[^,.]{0,40})[,.\s]/i);
+  const commaRole = text.match(/,\s*([^,.]{2,80}?(?:CEO|CFO|board member|styremedlem|styreleder|konsernsjef|finansdirektør|primærinnsider|director)[^,.]{0,40})[,.\s]/i);
   if (commaRole) return commaRole[1].trim();
 
   return "—";
 }
 
-function extractIssuer(rowText, messageText, title) {
-  const combined = normaliseWhitespace(`${rowText} ${title} ${messageText}`);
+function extractIssuerFromMessage(messageText) {
+  const text = normaliseWhitespace(messageText);
 
-  const issuerPatterns = [
-    /IssuerID[:\s]+([A-Z0-9._-]{2,20})/i,
-    /Ticker[:\s]+([A-Z0-9._-]{2,20})/i,
-    /\bOSE[:\s]+([A-Z0-9._-]{2,20})\b/i,
+  // Message pages have a header like: "IssuerID PEXIP Instrument PEXIP Market ..."
+  const headerPatterns = [
+    /IssuerID\s+([A-ZÆØÅ0-9._-]{2,20})\s+(?:Instrument|Market|Category|Mandatory|Attachment|Share|Date\/time|MessageID)/i,
+    /IssuerID\s+([A-ZÆØÅ0-9._-]{2,20})\b/i,
+    /Oslo\s+Børs\s+Ticker:\s*([A-Z0-9._-]{2,20})/i,
+    /Ticker:\s*([A-Z0-9._-]{2,20})/i,
   ];
 
-  for (const pattern of issuerPatterns) {
-    const match = combined.match(pattern);
-    if (match) return match[1].toUpperCase();
+  for (const pattern of headerPatterns) {
+    const match = text.match(pattern);
+    if (match && match[1].toUpperCase() !== "MESSAGE") return match[1].toUpperCase();
   }
 
-  // NewsWeb list rows often start with date/time, market, issuer/ticker.
-  const tokens = normaliseWhitespace(rowText).split(" ");
-  const likelyTicker = tokens.find((token) => /^[A-ZÆØÅ0-9]{2,8}$/.test(token) && !/^\d+$/.test(token));
-  if (likelyTicker) return likelyTicker;
+  return null;
+}
 
-  return "—";
+function extractIssuerName(messageText) {
+  const text = normaliseWhitespace(messageText);
+  const match = text.match(/Show advanced search\s+(.+?)\s+Date\/time/i);
+  if (match) return match[1].trim();
+  return null;
 }
 
 function messageIdFromUrl(url) {
@@ -197,7 +240,7 @@ async function renderSearchPage(url) {
     await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9,nb-NO;q=0.8,nb;q=0.7" });
 
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    await new Promise((resolve) => setTimeout(resolve, 1200));
 
     const links = await page.evaluate(() => {
       function closestUsefulText(el) {
@@ -239,15 +282,17 @@ async function scrapeMessage(page, link) {
 
   const messageText = normaliseWhitespace(payload.bodyText);
   const title = normaliseWhitespace(link.title || payload.title);
-  const combined = `${title} ${link.rowText || ""} ${messageText}`;
+  const combined = `${title} ${messageText}`;
   const messageId = messageIdFromUrl(link.href);
+  const issuerId = extractIssuerFromMessage(messageText) || "—";
+  const issuerName = extractIssuerName(messageText) || issuerId;
 
   return {
     messageId,
     messageUrl: link.href,
-    messageDate: normaliseDate(link.rowText) || normaliseDate(messageText),
-    issuerId: extractIssuer(link.rowText, messageText, title),
-    issuerName: extractIssuer(link.rowText, messageText, title),
+    messageDate: normaliseDate(messageText) || normaliseDate(link.rowText),
+    issuerId,
+    issuerName,
     title,
     type: classifyTradeType(combined),
     personRole: extractRole(combined),
@@ -259,10 +304,10 @@ async function scrapeMessage(page, link) {
 }
 
 function sortTrades(a, b) {
-  const dateA = a.messageDate || "";
-  const dateB = b.messageDate || "";
+  const dateA = a.messageDate || a.date || "";
+  const dateB = b.messageDate || b.date || "";
   if (dateA !== dateB) return dateB.localeCompare(dateA);
-  return String(b.messageId || "").localeCompare(String(a.messageId || ""));
+  return String(b.messageId || b.id || "").localeCompare(String(a.messageId || a.id || ""));
 }
 
 async function scrapeNewswebInsiders(daysBack = 14) {
@@ -280,21 +325,20 @@ async function scrapeNewswebInsiders(daysBack = 14) {
     });
 
     if (!uniqueLinks.length) {
-      throw new Error("Fant ingen NewsWeb-meldingslenker i søkeresultatet. NewsWeb kan ha endret struktur eller blokkert rendering.");
+      throw new Error("Fant ingen NewsWeb-meldingslenker i søkeresultatet.");
     }
 
     const trades = [];
     for (const link of uniqueLinks.slice(0, 10)) {
       try {
-        const trade = await scrapeMessage(page, link);
-        trades.push(trade);
+        trades.push(await scrapeMessage(page, link));
       } catch (error) {
         trades.push({
           messageId: messageIdFromUrl(link.href),
           messageUrl: link.href,
           messageDate: normaliseDate(link.rowText),
-          issuerId: extractIssuer(link.rowText, "", link.title),
-          issuerName: extractIssuer(link.rowText, "", link.title),
+          issuerId: "—",
+          issuerName: "—",
           title: link.title,
           type: "—",
           personRole: "—",
@@ -332,23 +376,12 @@ async function updateInsiderTrades(request, response) {
         fetched_at: fetchedAt,
         status: trade.parseError ? "partial" : "ok",
         message: trade.parseError || null,
-        raw: {
-          ...trade,
-          searchUrl: url,
-          category: CATEGORY,
-        },
+        raw: { ...trade, searchUrl: url, category: CATEGORY },
       });
       saved.push(row);
     }
 
-    response.status(200).json({
-      status: "ok",
-      metricKey: METRIC_KEY,
-      fetchedAt,
-      searchUrl: url,
-      savedCount: saved.length,
-      saved,
-    });
+    response.status(200).json({ status: "ok", metricKey: METRIC_KEY, fetchedAt, searchUrl: url, savedCount: saved.length, saved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ukjent feil ved henting av innsidehandler.";
 
@@ -366,11 +399,7 @@ async function updateInsiderTrades(request, response) {
       raw: { stage: "update-insider-trades" },
     });
 
-    response.status(200).json({
-      status: "error",
-      metricKey: METRIC_KEY,
-      message,
-    });
+    response.status(200).json({ status: "error", metricKey: METRIC_KEY, message });
   }
 }
 
@@ -423,7 +452,6 @@ async function readInsiderTrades(request, response) {
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
   const sevenDaysAgoIso = sevenDaysAgo.toISOString().slice(0, 10);
-
   const week = trades.filter((trade) => trade.date && trade.date >= sevenDaysAgoIso);
 
   response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -439,7 +467,9 @@ async function readInsiderTrades(request, response) {
 
 export default async function handler(request, response) {
   try {
-    const action = request.query?.action || new URL(request.url || "https://local/api/insider-trades", "https://local").searchParams.get("action");
+    const action =
+      request.query?.action ||
+      new URL(request.url || "https://local/api/insider-trades", "https://local").searchParams.get("action");
 
     if (action === "update") {
       await updateInsiderTrades(request, response);

@@ -1,29 +1,17 @@
-# Marked Dashboard PWA — Newsec/Akershus yields
+# Marked Dashboard PWA — yield parser/average fix
 
-Denne pakken flytter prime yield til Supabase og legger til Newsec og Akershus.
+Denne pakken fikser to ting:
 
-## Nye endepunkter
+1. `/api/yields` beregner snitt bare av faktiske tall.
+   Null/manglende kilder telles ikke lenger som 0.
 
-- `/api/update-yields`
-  - henter UNION M2
-  - henter Newsec siste Yieldtabell PDF
-  - prøver å hente Akershus Eiendom nøkkeltall med rendret side
-  - lagrer alle verdier i Supabase
-
-- `/api/yields`
-  - leser siste lagrede verdier
-  - beregner snitt per segment
-  - returnerer kildetabell til overlay
-
-## Workflow
-
-`.github/workflows/update-yields.yml`
-
-Kjører ukentlig og kan kjøres manuelt.
+2. `/api/update-yields` er mer robust:
+   - Newsec PDF-parser tåler flere radnavn/varianter
+   - Akershus prøver segmenter mer fleksibelt og lagrer partial results
 
 ## Test etter deploy
 
-1. `/api/health`
-2. `/api/update-yields`
-3. `/api/yields`
+1. `/api/health` skal vise `package: yields-parser-average-fix`
+2. Kjør `/api/update-yields`
+3. Sjekk `/api/yields`
 4. Refresh dashboard

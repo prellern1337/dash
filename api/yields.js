@@ -35,8 +35,12 @@ function latestByKey(rows, key, status = null) {
   return rows.find((row) => row.metric_key === key && (!status || row.status === status)) || null;
 }
 
+function hasNumericValue(value) {
+  return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
+}
+
 function average(values) {
-  const numeric = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+  const numeric = values.filter(hasNumericValue).map(Number);
   if (!numeric.length) return null;
   return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 }

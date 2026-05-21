@@ -3,8 +3,8 @@ export default async function handler(request, response) {
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "yields-newsec-akershus",
-    yields: "UNION + Newsec + Akershus via /api/update-yields and Supabase",
+    package: "yields-parser-average-fix",
+    yields: "Improved Newsec/Akershus parsers and fixed average null handling.",
     generatedAt: new Date().toISOString()
   })
 }

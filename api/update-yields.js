@@ -88,26 +88,38 @@ async function fetchUnionSegment(segmentId) {
 
 function findLatestNewsecPdf(html) {
   const candidates = [];
-  const regex = /<a\b[^>]*href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let match;
 
-  while ((match = regex.exec(html)) !== null) {
-    const href = match[1].replace(/&amp;/g, "&");
-    const label = stripHtml(match[2]) || href.split("/").pop();
-    const combined = `${href} ${label}`.toLowerCase();
+  function addCandidate(url, label) {
+    if (!url) return;
+    const cleanedUrl = String(url).replace(/\\\//g, "/").replace(/&amp;/g, "&");
+    const cleanedLabel = stripHtml(label || cleanedUrl.split("/").pop());
+    const combined = `${cleanedUrl} ${cleanedLabel}`.toLowerCase();
 
-    if (!combined.includes("yieldtabell")) continue;
+    if (!combined.includes("yieldtabell") && !combined.includes("yield-table") && !combined.includes("yield")) return;
+    if (!cleanedUrl.toLowerCase().includes(".pdf")) return;
+    if (candidates.some((candidate) => candidate.url === cleanedUrl)) return;
 
-    const quarterMatch = combined.match(/q([1-4])[-_\s]*(20\d{2})|q([1-4])[-_\s]*\/?[-_\s]*(20\d{2})|q([1-4])/i);
     const yearMatch = combined.match(/\b(20\d{2})\b/);
+    const quarterMatch = combined.match(/q\s*([1-4])/i);
 
     candidates.push({
-      url: href.startsWith("http") ? href : `https://www.newsec.no${href}`,
-      label,
+      url: cleanedUrl.startsWith("http") ? cleanedUrl : `https://www.newsec.no${cleanedUrl}`,
+      label: cleanedLabel,
       year: yearMatch ? Number.parseInt(yearMatch[1], 10) : 0,
-      quarter: quarterMatch ? Number.parseInt(quarterMatch[1] || quarterMatch[3] || quarterMatch[5], 10) : 0,
+      quarter: quarterMatch ? Number.parseInt(quarterMatch[1], 10) : 0,
       index: candidates.length,
     });
+  }
+
+  const anchorRegex = /<a\b[^>]*href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  while ((match = anchorRegex.exec(html)) !== null) {
+    addCandidate(match[1], match[2]);
+  }
+
+  const rawPdfRegex = /https?:\\?\/\\?\/[^"'\s<>]+?\.pdf[^"'\s<>]*/gi;
+  for (const rawUrl of html.match(rawPdfRegex) || []) {
+    addCandidate(rawUrl, rawUrl.split("/").pop());
   }
 
   if (!candidates.length) throw new Error("Fant ingen Newsec yieldtabell-PDF.");
@@ -121,21 +133,34 @@ function findLatestNewsecPdf(html) {
   return candidates[0];
 }
 
-function extractNewsecRowValue(text, rowLabel) {
+function findLabelIndex(text, labels) {
+  const lower = text.toLowerCase();
+  for (const label of labels) {
+    const index = lower.indexOf(label.toLowerCase());
+    if (index >= 0) return { index, label };
+  }
+  return { index: -1, label: null };
+}
+
+function extractNewsecRowValue(text, rowLabels) {
+  const labels = Array.isArray(rowLabels) ? rowLabels : [rowLabels];
   const clean = normaliseText(text);
-  const regex = new RegExp(`${rowLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+((?:[-+]?\\d+(?:[,.]\\d+)?\\s*%?\\s+){6,12})`, "i");
-  const match = clean.match(regex);
+  const { index, label } = findLabelIndex(clean, labels);
 
-  if (!match) throw new Error(`Fant ikke Newsec-raden: ${rowLabel}.`);
+  if (index < 0) {
+    throw new Error(`Fant ikke Newsec-raden: ${labels.join(" / ")}.`);
+  }
 
-  const values = match[1]
+  const slice = clean.slice(index + label.length, index + label.length + 360);
+  const values = slice
     .match(/[-+]?\d+(?:[,.]\d+)?/g)
     ?.map(parseNumber)
-    .filter((value) => Number.isFinite(value));
+    .filter((value) => Number.isFinite(value) && value > 0 && value < 20);
 
-  if (!values || values.length < 2) throw new Error(`Kunne ikke parse Newsec-raden: ${rowLabel}.`);
+  if (!values || values.length < 2) {
+    throw new Error(`Kunne ikke parse Newsec-raden: ${labels.join(" / ")}.`);
+  }
 
-  // Latest quarter has Low / High as the final two numbers. We want Low.
   return values[values.length - 2];
 }
 
@@ -161,7 +186,7 @@ async function fetchNewsecYields() {
     {
       source: "newsec",
       segment: "office",
-      value: extractNewsecRowValue(text, "Office Oslo CBD"),
+      value: extractNewsecRowValue(text, ["Office Oslo CBD", "Oslo CBD", "CBD"]),
       sourceName: "Newsec Yieldtabell",
       sourceUrl: latestPdf.url,
       sourceDocument: latestPdf.label,
@@ -170,7 +195,7 @@ async function fetchNewsecYields() {
     {
       source: "newsec",
       segment: "retail",
-      value: extractNewsecRowValue(text, "Retail Prime"),
+      value: extractNewsecRowValue(text, ["Retail Prime", "Retail prime", "Retail"]),
       sourceName: "Newsec Yieldtabell",
       sourceUrl: latestPdf.url,
       sourceDocument: latestPdf.label,
@@ -179,7 +204,7 @@ async function fetchNewsecYields() {
     {
       source: "newsec",
       segment: "logistics",
-      value: extractNewsecRowValue(text, "Logistics Prime"),
+      value: extractNewsecRowValue(text, ["Logistics Prime", "Logistics prime", "Logistics"]),
       sourceName: "Newsec Yieldtabell",
       sourceUrl: latestPdf.url,
       sourceDocument: latestPdf.label,
@@ -236,7 +261,7 @@ async function clickAkershusSegment(page, label) {
     const candidates = Array.from(document.querySelectorAll("button, a, [role='button'], div, span"));
     const target = candidates.find((el) => {
       const text = (el.innerText || el.textContent || "").trim().toLowerCase();
-      return text === wanted.toLowerCase();
+      return text === wanted.toLowerCase() || text.includes(wanted.toLowerCase());
     });
     if (target) {
       target.click();
@@ -251,32 +276,44 @@ async function clickAkershusSegment(page, label) {
 
 async function fetchAkershusYields() {
   const { browser, page } = await renderAkershusPage();
+  const results = [];
+  const errors = [];
 
   try {
-    const results = [];
-
-    for (const [segment, label] of [
-      ["office", "Kontor"],
-      ["logistics", "Logistikk"],
-      ["retail", "Handel"],
+    for (const [segment, label, alternatives] of [
+      ["office", "Kontor", ["Kontor", "Office"]],
+      ["logistics", "Logistikk", ["Logistikk", "Lager", "Logistics"]],
+      ["retail", "Handel", ["Handel", "Retail"]],
     ]) {
-      await clickAkershusSegment(page, label);
+      try {
+        let clicked = false;
+        for (const option of alternatives) {
+          clicked = await clickAkershusSegment(page, option);
+          if (clicked) break;
+        }
 
-      const text = await page.evaluate(() => document.body ? document.body.innerText : "");
-      const value = extractAkershusPrimeYield(text, label);
+        const text = await page.evaluate(() => document.body ? document.body.innerText : "");
+        const value = extractAkershusPrimeYield(text, label);
 
-      results.push({
-        source: "akershus",
-        segment,
-        value,
-        sourceName: "Akershus Eiendom",
-        sourceUrl: AKERSHUS_URL,
-        sourceDocument: `Segmentoversikt ${label}`,
-        method: "akershus_rendered_page",
-      });
+        results.push({
+          source: "akershus",
+          segment,
+          value,
+          sourceName: "Akershus Eiendom",
+          sourceUrl: AKERSHUS_URL,
+          sourceDocument: `Segmentoversikt ${label}`,
+          method: clicked ? "akershus_rendered_page_click" : "akershus_rendered_page_default",
+        });
+      } catch (error) {
+        errors.push({
+          source: "akershus",
+          segment,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
-    return results;
+    return { results, errors };
   } finally {
     await browser.close();
   }
@@ -346,10 +383,14 @@ export default async function handler(request, response) {
     for (const segment of Object.keys(SEGMENTS)) saved.push(await saveError("newsec", segment, message, fetchedAt));
   }
 
-  // Akershus rendered page.
+  // Akershus rendered page. Save partial results if only one segment fails.
   try {
-    const results = await fetchAkershusYields();
+    const { results, errors: akershusErrors } = await fetchAkershusYields();
     for (const result of results) saved.push(await saveResult(result, fetchedAt));
+    for (const error of akershusErrors) {
+      errors.push(`Akershus ${error.segment}: ${error.message}`);
+      saved.push(await saveError("akershus", error.segment, error.message, fetchedAt));
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     errors.push(`Akershus: ${message}`);

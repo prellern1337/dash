@@ -1,15 +1,18 @@
-# Market Dashboard — insider trades parse fix
+# Market Dashboard — insider tile visible fix
 
-Denne pakken fikser parseren for innsidehandler:
+Denne pakken fikser at selve brede Innsidehandler-tilen manglet i dashboard-gridet.
 
-- Leser IssuerID fra selve meldingssiden, ikke søkeresultat-tabellheader.
-- Fikser aksjetall som 1,200 og 9,000 slik at de blir 1200 og 9000.
-- Bruker message body, ikke hele søkeresultatlisten, for parsing av type/stilling/aksjer/pris.
-- Beholder bred tile og overlay.
+## Endringer
+
+- Selve `<Tile title="Innsidehandler">` er nå lagt inn øverst i `main`-gridet.
+- Parser-fixene fra forrige pakke er beholdt:
+  - IssuerID leses fra meldingssiden
+  - 1,200 / 9,000 tolkes som 1200 / 9000
+  - parseren bruker selve meldingsinnholdet
 
 ## Test
 
 1. Deploy pakken
 2. Kjør `/api/insider-trades?action=update`
 3. Kjør `/api/insider-trades`
-4. Refresh dashboardet. Hvis tile fortsatt ikke vises, test i inkognito/PWA-cache.
+4. Refresh dashboardet / test i inkognito

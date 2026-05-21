@@ -245,7 +245,7 @@ function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, 
     standard: "min-h-36",
     large: "min-h-48",
     xlarge: "min-h-56",
-    insider: "min-h-[22rem]",
+    insider: "min-h-[20rem]",
   };
 
   const contentPaddingClasses = {
@@ -1000,6 +1000,20 @@ export default function MarketDashboardPrototype() {
         </section>
 
         <main className="grid grid-cols-2 gap-3">
+          <Tile
+            title="Innsidehandler"
+            source="NewsWeb"
+            accent="amber"
+            icon={<BriefcaseBusiness size={17} />}
+            onClick={() => setShowInsiderTrades(true)}
+            size="insider"
+            wide
+          >
+            <div className="mt-2">
+              <InsiderTradesTable trades={insiderState.latest.slice(0, 10)} compact />
+            </div>
+          </Tile>
+
           <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large">
             <RateStack
               rows={[

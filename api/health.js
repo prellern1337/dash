@@ -3,8 +3,8 @@ export default async function handler(request, response) {
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "seb-swaps-supabase-github-actions",
-    swaps: "SEB -> /api/update-swaps -> Supabase; /api/swaps reads Supabase",
+    package: "yields-newsec-akershus",
+    yields: "UNION + Newsec + Akershus via /api/update-yields and Supabase",
     generatedAt: new Date().toISOString()
   })
 }

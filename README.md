@@ -1,29 +1,29 @@
-# Marked Dashboard PWA — SEB swaps to Supabase
+# Marked Dashboard PWA — Newsec/Akershus yields
 
-Denne pakken flytter SEB swap-renter fra live pageload-scraping til Supabase-lagring.
+Denne pakken flytter prime yield til Supabase og legger til Newsec og Akershus.
 
-## Flyt
+## Nye endepunkter
 
-- `/api/update-swaps`
-  - åpner SEB swap-siden med headless browser
-  - henter Swap [NOK] og Swap [SEK]
-  - lagrer 3Y, 5Y, 10Y for NOK/SEK i Supabase
+- `/api/update-yields`
+  - henter UNION M2
+  - henter Newsec siste Yieldtabell PDF
+  - prøver å hente Akershus Eiendom nøkkeltall med rendret side
+  - lagrer alle verdier i Supabase
 
-- `/api/swaps`
-  - leser siste lagrede swap-renter fra Supabase
-  - raskt for dashboardet
+- `/api/yields`
+  - leser siste lagrede verdier
+  - beregner snitt per segment
+  - returnerer kildetabell til overlay
 
-- `.github/workflows/update-swaps.yml`
-  - kjører 4 ganger daglig mandag-fredag
-  - trigger `/api/update-swaps`
+## Workflow
+
+`.github/workflows/update-yields.yml`
+
+Kjører ukentlig og kan kjøres manuelt.
 
 ## Test etter deploy
 
 1. `/api/health`
-2. `/api/update-swaps`
-3. `/api/swaps`
-4. Refresh dashboardet
-
-## Historikk
-
-Alle swap-oppdateringer lagres i `market_metrics`, så vi kan senere lage historiske grafer per tenor/valuta.
+2. `/api/update-yields`
+3. `/api/yields`
+4. Refresh dashboard

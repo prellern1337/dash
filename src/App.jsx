@@ -132,37 +132,19 @@ const fallbackSwaps = {
 
 const fallbackYieldState = {
   status: "loading",
-  sourceName: "UNION M2",
+  sourceName: "Prime yield",
   fetchedAt: null,
   message: null,
+  errors: [],
+  rows: [
+    { source: "UNION", office: { value: null }, retail: { value: null }, logistics: { value: null } },
+    { source: "Newsec", office: { value: null }, retail: { value: null }, logistics: { value: null } },
+    { source: "Akershus", office: { value: null }, retail: { value: null }, logistics: { value: null } },
+  ],
   data: {
-    office: {
-      id: "office",
-      label: "Kontor",
-      value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/kontor",
-      status: "loading",
-    },
-    retail: {
-      id: "retail",
-      label: "Handel",
-      value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/handel",
-      status: "loading",
-    },
-    logistics: {
-      id: "logistics",
-      label: "Logistikk",
-      value: null,
-      period: null,
-      source: "UNION",
-      sourceUrl: "https://m2.union.no/segmenter/logistikk",
-      status: "loading",
-    },
+    office: { label: "Kontor", average: null, sources: {} },
+    retail: { label: "Handel", average: null, sources: {} },
+    logistics: { label: "Logistikk", average: null, sources: {} },
   },
 };
 
@@ -410,29 +392,7 @@ function FxOverlay({ pair, onClose }) {
 }
 
 function YieldOverlay({ onClose, yieldState }) {
-  const rows = [
-    {
-      source: "UNION",
-      status: yieldState.status === "loading" ? "Henter" : yieldState.status === "error" ? "Feil" : "Live",
-      office: yieldState.data.office,
-      retail: yieldState.data.retail,
-      logistics: yieldState.data.logistics,
-    },
-    {
-      source: "Newsec",
-      status: "Ikke koblet",
-      office: { value: null },
-      retail: { value: null },
-      logistics: { value: null },
-    },
-    {
-      source: "Akershus",
-      status: "Ikke koblet",
-      office: { value: null },
-      retail: { value: null },
-      logistics: { value: null },
-    },
-  ];
+  const rows = yieldState.rows || fallbackYieldState.rows;
 
   return (
     <Overlay
@@ -441,7 +401,7 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            UNION M2 hentes live. Newsec og Akershus kobles på senere.
+            Snitt beregnes av tilgjengelige kilder: UNION, Newsec og Akershus.
           </span>
           <ExternalLink size={15} />
         </div>
@@ -449,12 +409,14 @@ function YieldOverlay({ onClose, yieldState }) {
     >
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
-          ? `Sist hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
+          ? `Sist oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}`
           : yieldState.status === "partial"
-            ? `Delvis hentet fra UNION M2: ${formatDateTimeShort(yieldState.fetchedAt)}`
+            ? `Delvis oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.errors?.[0] || ""}`
             : yieldState.status === "loading"
-              ? "Henter UNION M2-yielder..."
-              : `Kunne ikke hente UNION M2: ${yieldState.message || "Ukjent feil"}`}
+              ? "Leser prime yield fra Supabase..."
+              : yieldState.status === "empty"
+                ? "Ingen prime yield-data lagret ennå. Kjør /api/update-yields."
+                : `Kunne ikke lese prime yield: ${yieldState.message || "Ukjent feil"}`}
       </div>
 
       <div className="overflow-hidden rounded-3xl border border-stone-100">
@@ -472,13 +434,25 @@ function YieldOverlay({ onClose, yieldState }) {
               <tr key={row.source} className="border-t border-stone-100">
                 <td className="px-3 py-3">
                   <div className="font-medium text-stone-800">{row.source}</div>
-                  <div className="mt-0.5 text-[10px] text-stone-400">{row.status}</div>
+                  <div className="mt-0.5 text-[10px] text-stone-400">
+                    {[row.office?.status, row.retail?.status, row.logistics?.status].includes("stale")
+                      ? "Delvis gammel"
+                      : [row.office?.value, row.retail?.value, row.logistics?.value].some((value) => hasNumericValue(value))
+                        ? "Lagret"
+                        : "Mangler"}
+                  </div>
                 </td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office.value)}</td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail.value)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics.value)}</td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office?.value)}</td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail?.value)}</td>
+                <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics?.value)}</td>
               </tr>
             ))}
+            <tr className="border-t border-stone-200 bg-stone-50 font-semibold">
+              <td className="px-3 py-3 text-stone-950">Snitt</td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.office.average)}</td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.retail.average)}</td>
+              <td className="px-3 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.logistics.average)}</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -639,7 +613,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadYields() {
       try {
-        const response = await fetch("/api/yields");
+        const response = await fetch(`/api/yields?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -648,11 +622,13 @@ export default function MarketDashboardPrototype() {
 
         if (!cancelled) {
           setYieldState({
-            status: payload.status === "partial" ? "partial" : "ok",
-            sourceName: payload.sourceName || "UNION M2",
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "Prime yield",
             fetchedAt: payload.fetchedAt,
-            message: payload.errors?.length ? payload.errors.join(" | ") : null,
+            message: payload.message || (payload.errors?.length ? payload.errors.join(" | ") : null),
+            errors: payload.errors || [],
             data: payload.data || fallbackYieldState.data,
+            rows: payload.rows || fallbackYieldState.rows,
           });
         }
       } catch (error) {
@@ -691,7 +667,7 @@ export default function MarketDashboardPrototype() {
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "Renter, FX + UNION live" };
+      return { tone: "good", label: "Renter, FX + yield live" };
     }
     if (swapsState.status === "error") {
       return { tone: "bad", label: "SEB swap feilet" };
@@ -954,7 +930,7 @@ export default function MarketDashboardPrototype() {
 
           <Tile
             title="Prime yield"
-            source="UNION M2"
+            source="Snitt"
             accent="slate"
             icon={<Building2 size={17} />}
             onClick={() => setShowYield(true)}
@@ -962,9 +938,9 @@ export default function MarketDashboardPrototype() {
           >
             <RateStack
               rows={[
-                { label: "Kontor", value: formatOptionalPercent(yieldState.data.office.value) },
-                { label: "Handel", value: formatOptionalPercent(yieldState.data.retail.value) },
-                { label: "Logistikk", value: formatOptionalPercent(yieldState.data.logistics.value) },
+                { label: "Kontor", value: formatOptionalPercent(yieldState.data.office.average) },
+                { label: "Handel", value: formatOptionalPercent(yieldState.data.retail.average) },
+                { label: "Logistikk", value: formatOptionalPercent(yieldState.data.logistics.average) },
               ]}
             />
           </Tile>
@@ -980,7 +956,7 @@ export default function MarketDashboardPrototype() {
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
-          SEB swap, valuta, 3M STIBOR og UNION M2-yielder hentes via Vercel API-funksjoner. 3M NIBOR leses fra Supabase og oppdateres via /api/update-nibor.
+          SEB swap, renter, valuta og prime yield lagres/leses via Supabase der det gir raskere dashboard og historikk.
         </footer>
       </div>
 

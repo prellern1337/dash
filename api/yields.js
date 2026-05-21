@@ -1,172 +1,129 @@
-const UNION_SEGMENTS = [
-  {
-    id: "office",
-    label: "Kontor",
-    url: "https://m2.union.no/segmenter/kontor",
-  },
-  {
-    id: "retail",
-    label: "Handel",
-    url: "https://m2.union.no/segmenter/handel",
-  },
-  {
-    id: "logistics",
-    label: "Logistikk",
-    url: "https://m2.union.no/segmenter/logistikk",
-  },
+import { getSupabaseAdmin } from "../lib/supabase.js";
+
+const SOURCES = [
+  { key: "union", label: "UNION" },
+  { key: "newsec", label: "Newsec" },
+  { key: "akershus", label: "Akershus" },
 ];
 
-function parseNumber(value) {
-  if (typeof value === "number") return value;
-  if (typeof value !== "string") return Number.NaN;
+const SEGMENTS = [
+  { key: "office", label: "Kontor" },
+  { key: "retail", label: "Handel" },
+  { key: "logistics", label: "Logistikk" },
+];
 
-  return Number.parseFloat(
-    value
-      .replace(/\s/g, "")
-      .replace(",", ".")
-      .replace(/[^\d.-]/g, "")
-  );
+function metricKey(source, segment) {
+  return `yield_${source}_${segment}`;
 }
 
-function htmlToText(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/\s+/g, " ")
-    .trim();
+async function fetchRows() {
+  const supabase = getSupabaseAdmin();
+  const keys = SOURCES.flatMap((source) => SEGMENTS.map((segment) => metricKey(source.key, segment.key)));
+
+  const { data, error } = await supabase
+    .from("market_metrics")
+    .select("*")
+    .in("metric_key", keys)
+    .order("fetched_at", { ascending: false })
+    .limit(200);
+
+  if (error) throw error;
+  return data || [];
 }
 
-function extractPrimeYield(html) {
-  const text = htmlToText(html);
-
-  const strictPattern =
-    /Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?\s+Kilde:\s*UNION\s+per\s+([^#]+?)(?=\s+#|\s+Toppleie|\s+Sekundær|\s+Privat|\s+Normal|\s+Våre|\s*$)/i;
-
-  const strictMatch = text.match(strictPattern);
-  if (strictMatch) {
-    const value = parseNumber(strictMatch[1]);
-    if (Number.isFinite(value)) {
-      return {
-        value,
-        period: strictMatch[2].trim().replace(/\.$/, ""),
-      };
-    }
-  }
-
-  const loosePattern = /Prime\s+yield\s+([-+]?\d+(?:[.,]\d+)?)\s*%?/i;
-  const looseMatch = text.match(loosePattern);
-  if (looseMatch) {
-    const value = parseNumber(looseMatch[1]);
-    if (Number.isFinite(value)) {
-      return {
-        value,
-        period: null,
-      };
-    }
-  }
-
-  throw new Error("Fant ikke Prime yield på UNION M2-siden.");
+function latestByKey(rows, key, status = null) {
+  return rows.find((row) => row.metric_key === key && (!status || row.status === status)) || null;
 }
 
-async function fetchUnionSegment(segment) {
-  const response = await fetch(segment.url, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`UNION M2 svarte med ${response.status} for ${segment.label}.`);
-  }
-
-  const html = await response.text();
-  const observation = extractPrimeYield(html);
-
-  return {
-    id: segment.id,
-    label: segment.label,
-    source: "UNION",
-    sourceUrl: segment.url,
-    value: observation.value,
-    period: observation.period,
-    status: "ok",
-  };
-}
-
-function emptySegment(id, label) {
-  return {
-    id,
-    label,
-    value: null,
-    period: null,
-    source: "UNION",
-    sourceUrl: UNION_SEGMENTS.find((segment) => segment.id === id)?.url,
-    status: "error",
-  };
+function average(values) {
+  const numeric = values.filter((value) => Number.isFinite(Number(value))).map(Number);
+  if (!numeric.length) return null;
+  return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 }
 
 export default async function handler(request, response) {
-  const fetchedAt = new Date().toISOString();
-
   try {
-    const settled = await Promise.allSettled(
-      UNION_SEGMENTS.map((segment) => fetchUnionSegment(segment))
-    );
+    const rows = await fetchRows();
 
-    const data = {};
+    const segments = {};
+    const sourceRows = [];
     const errors = [];
 
-    settled.forEach((result, index) => {
-      const segment = UNION_SEGMENTS[index];
+    for (const segment of SEGMENTS) {
+      const sources = {};
 
-      if (result.status === "fulfilled") {
-        data[segment.id] = result.value;
-      } else {
-        data[segment.id] = emptySegment(segment.id, segment.label);
-        errors.push(
-          result.reason instanceof Error
-            ? result.reason.message
-            : String(result.reason)
-        );
+      for (const source of SOURCES) {
+        const key = metricKey(source.key, segment.key);
+        const latestGood = latestByKey(rows, key, "ok");
+        const latestRun = latestByKey(rows, key);
+
+        const hasNewerError =
+          latestGood &&
+          latestRun &&
+          latestRun.status !== "ok" &&
+          new Date(latestRun.fetched_at).getTime() > new Date(latestGood.fetched_at).getTime();
+
+        if (!latestGood && latestRun?.status === "error") {
+          errors.push(`${source.label} ${segment.label}: ${latestRun.message}`);
+        }
+
+        if (hasNewerError) {
+          errors.push(`${source.label} ${segment.label}: ${latestRun.message}`);
+        }
+
+        sources[source.key] = {
+          source: source.label,
+          value: latestGood ? Number(latestGood.value) : null,
+          fetchedAt: latestGood?.fetched_at || null,
+          sourceName: latestGood?.source_name || source.label,
+          sourceUrl: latestGood?.source_url || null,
+          sourceDocument: latestGood?.source_document || null,
+          status: latestGood ? (hasNewerError ? "stale" : "ok") : "empty",
+          message: hasNewerError ? latestRun.message : null,
+        };
       }
-    });
 
-    const hasAnyValue = Object.values(data).some((segment) =>
-      Number.isFinite(Number(segment.value))
-    );
-
-    if (!hasAnyValue) {
-      throw new Error(errors.join(" | ") || "Kunne ikke hente UNION M2-yielder.");
+      segments[segment.key] = {
+        label: segment.label,
+        average: average(Object.values(sources).map((item) => item.value)),
+        sources,
+      };
     }
 
-    response.setHeader("Cache-Control", "s-maxage=21600, stale-while-revalidate=604800");
+    for (const source of SOURCES) {
+      sourceRows.push({
+        source: source.label,
+        office: segments.office.sources[source.key],
+        retail: segments.retail.sources[source.key],
+        logistics: segments.logistics.sources[source.key],
+      });
+    }
+
+    const values = Object.values(segments).flatMap((segment) =>
+      Object.values(segment.sources).map((source) => source.value)
+    );
+
+    const hasAnyValue = values.some((value) => Number.isFinite(Number(value)));
+
+    response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
-      status: errors.length ? "partial" : "ok",
-      sourceName: "UNION M2",
-      fetchedAt,
-      nextSuggestedUpdate: "Onsdag ettermiddag",
-      data,
+      status: !hasAnyValue ? "empty" : errors.length ? "partial" : "ok",
+      sourceName: "Prime yield",
+      fetchedAt: new Date().toISOString(),
+      data: {
+        office: segments.office,
+        retail: segments.retail,
+        logistics: segments.logistics,
+      },
+      rows: sourceRows,
       errors,
     });
   } catch (error) {
     response.status(500).json({
       status: "error",
-      sourceName: "UNION M2",
-      fetchedAt,
-      message:
-        error instanceof Error
-          ? error.message
-          : "Ukjent feil ved henting av UNION M2-yielder.",
-      data: {
-        office: emptySegment("office", "Kontor"),
-        retail: emptySegment("retail", "Handel"),
-        logistics: emptySegment("logistics", "Logistikk"),
-      },
+      sourceName: "Prime yield",
+      fetchedAt: new Date().toISOString(),
+      message: error instanceof Error ? error.message : "Ukjent feil ved lesing av prime yield.",
     });
   }
 }

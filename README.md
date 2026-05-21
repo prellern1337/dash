@@ -1,17 +1,11 @@
-# Market Dashboard — insider tile bottom + zero fix
+# Market Dashboard — rate tile alignment + NIBOR subtitle fix
 
-Denne pakken fikser innsidehandel-tilen:
+Denne pakken bygger videre på insider-final-ui-cleanup og gjør to UI-endringer:
 
-- Bred Innsidehandler-tile ligger nederst i dashboard-gridet.
-- Aksjer = 0/null/ugyldig vises som `—`, ikke som `0`.
-- Parser-fixene er beholdt:
-  - IssuerID leses fra meldingssiden
-  - 1,200 / 9,000 tolkes som 1200 / 9000
-  - parseren bruker selve meldingsinnholdet
+- NIBOR-tilen viser nå dato/tid for siste henting under renten, ikke "Morgenrapport Renter og Valuta".
+- NIBOR/STIBOR-rentene får likere vertikal plassering fordi begge får én kort subtitle-linje.
 
-## Test
-
-1. Deploy pakken
-2. Kjør `/api/insider-trades?action=update`
-3. Kjør `/api/insider-trades`
-4. Refresh dashboardet, gjerne med `?v=insider-bottom`
+Inkluderer også tidligere endringer:
+- Innsidehandler-tilen ligger nederst.
+- "Neste"-tilen er fjernet.
+- MESSAGE vises ikke som selskap i innsidehandel-tabellen.

@@ -214,6 +214,15 @@ function formatPrice(value) {
   return new Intl.NumberFormat("no-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value));
 }
 
+function displayCompany(trade) {
+  const issuerId = trade?.issuerId;
+  const issuerName = trade?.issuerName;
+
+  if (issuerId && issuerId !== "MESSAGE" && issuerId !== "—") return issuerId;
+  if (issuerName && issuerName !== "MESSAGE" && issuerName !== "—") return issuerName;
+  return "—";
+}
+
 function TypeBadge({ type }) {
   const clean = type || "—";
   const cls =
@@ -458,7 +467,7 @@ function InsiderTradesTable({ trades, compact = false }) {
           {visible.map((trade) => (
             <tr key={trade.id || trade.messageId || trade.messageUrl} className="border-t border-stone-100">
               <td className="px-2 py-1.5 text-[10px] tabular-nums text-stone-500">{formatShortDate(trade.date)}</td>
-              <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">{trade.issuerId}</td>
+              <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">{displayCompany(trade)}</td>
               <td className="px-1 py-1.5"><TypeBadge type={trade.type} /></td>
               <td className="truncate px-1 py-1.5 text-[10px] text-stone-500">{trade.personRole || "—"}</td>
               <td className="px-1 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatShares(trade.shares)}</td>
@@ -1027,7 +1036,7 @@ export default function MarketDashboardPrototype() {
             unit="%"
             subtitle={
               niborState.status === "ok"
-                ? niborState.sourceDocument || `Lagret: ${formatDateTimeShort(niborState.fetchedAt)}`
+                ? `Hentet: ${formatDateTimeShort(niborState.fetchedAt)}`
                 : niborState.status === "stale"
                   ? `Sist vellykket: ${formatDateTimeShort(niborState.fetchedAt)}`
                   : niborState.status === "empty"
@@ -1093,16 +1102,6 @@ export default function MarketDashboardPrototype() {
               ]}
             />
           </Tile>
-
-          <Tile
-            title="Neste"
-            source="Planlagt"
-            value="+"
-            subtitle="Aksjer, indekser eller egne eiendoms-KPIer kan legges inn her."
-            accent="slate"
-            icon={<BriefcaseBusiness size={17} />}
-          />
-
           <Tile
             title="Innsidehandler"
             source="NewsWeb"

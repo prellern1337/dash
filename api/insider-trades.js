@@ -403,6 +403,38 @@ async function updateInsiderTrades(request, response) {
   }
 }
 
+function isBadIssuer(value) {
+  const text = String(value || "").trim();
+  return !text || text === "—" || text.toUpperCase() === "MESSAGE";
+}
+
+function inferCompanyFromTitle(title) {
+  const text = normaliseWhitespace(title || "");
+  if (!text) return null;
+
+  const split = text.split(/\s+[-–—:]\s+|:\s+/)[0]?.trim();
+  if (split && split.length >= 2 && split.length <= 60 && !/mandatory notification|trade by primary|meldepliktig/i.test(split)) {
+    return split;
+  }
+
+  return null;
+}
+
+function cleanIssuer(raw, row) {
+  const issuerId = raw.issuerId;
+  const issuerName = raw.issuerName;
+  const title = raw.title || row.source_document || "";
+
+  if (!isBadIssuer(issuerId)) return { issuerId, issuerName: !isBadIssuer(issuerName) ? issuerName : issuerId };
+
+  if (!isBadIssuer(issuerName)) return { issuerId: "—", issuerName };
+
+  const inferred = inferCompanyFromTitle(title);
+  if (inferred) return { issuerId: "—", issuerName: inferred };
+
+  return { issuerId: "—", issuerName: "—" };
+}
+
 function uniqueTrades(rows) {
   const seen = new Set();
   const trades = [];
@@ -413,13 +445,16 @@ function uniqueTrades(rows) {
     if (seen.has(id)) continue;
     seen.add(id);
 
+    const cleanedIssuer = cleanIssuer(raw, row);
+
     trades.push({
       id,
       messageId: raw.messageId || null,
       messageUrl: raw.messageUrl || row.source_url,
       date: raw.messageDate || row.observed_date,
-      issuerId: raw.issuerId || "—",
-      issuerName: raw.issuerName || raw.issuerId || "—",
+      issuerId: cleanedIssuer.issuerId,
+      issuerName: cleanedIssuer.issuerName,
+      companyDisplay: cleanedIssuer.issuerId !== "—" ? cleanedIssuer.issuerId : cleanedIssuer.issuerName,
       title: raw.title || row.source_document || "",
       type: raw.type || "—",
       personRole: raw.personRole || "—",

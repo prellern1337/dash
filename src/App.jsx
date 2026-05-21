@@ -148,6 +148,15 @@ const fallbackYieldState = {
   },
 };
 
+const fallbackInsiderTrades = {
+  status: "loading",
+  sourceName: "Oslo Børs NewsWeb",
+  fetchedAt: null,
+  message: null,
+  latest: [],
+  week: [],
+};
+
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
@@ -188,6 +197,34 @@ function formatChartDate(value) {
   }).format(date);
 }
 
+function formatShortDate(value) {
+  if (!value) return "—";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("no-NO", { day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function formatShares(value) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  return new Intl.NumberFormat("no-NO", { maximumFractionDigits: 0 }).format(Number(value));
+}
+
+function formatPrice(value) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  return new Intl.NumberFormat("no-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value));
+}
+
+function TypeBadge({ type }) {
+  const clean = type || "—";
+  const cls =
+    clean === "Kjøp"
+      ? "bg-emerald-50 text-emerald-700"
+      : clean === "Salg"
+        ? "bg-rose-50 text-rose-700"
+        : "bg-stone-100 text-stone-500";
+  return <span className={`rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${cls}`}>{clean}</span>;
+}
+
 function Pill({ children, tone = "neutral" }) {
   const classes = {
     neutral: "bg-stone-100 text-stone-600",
@@ -203,17 +240,19 @@ function Pill({ children, tone = "neutral" }) {
   );
 }
 
-function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, onClick, source, size = "standard" }) {
+function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, onClick, source, size = "standard", wide = false }) {
   const heightClasses = {
     standard: "min-h-36",
     large: "min-h-48",
     xlarge: "min-h-56",
+    insider: "min-h-[22rem]",
   };
 
   const contentPaddingClasses = {
     standard: "",
     large: "pb-1",
     xlarge: "pb-2",
+    insider: "pb-2",
   };
 
   const accentClasses = {
@@ -231,7 +270,7 @@ function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, 
       type="button"
       whileTap={{ scale: onClick ? 0.985 : 1 }}
       onClick={onClick}
-      className={`rounded-[1.65rem] bg-white p-4 text-left shadow-sm ring-1 ring-black/[0.04] ${heightClasses[size]} ${
+      className={`${wide ? "col-span-2" : ""} rounded-[1.65rem] bg-white p-4 text-left shadow-sm ring-1 ring-black/[0.04] ${heightClasses[size]} ${
         onClick ? "cursor-pointer active:shadow-none" : "cursor-default"
       }`}
     >
@@ -391,6 +430,78 @@ function FxOverlay({ pair, onClose }) {
   );
 }
 
+function InsiderTradesTable({ trades, compact = false }) {
+  const visible = trades || [];
+
+  if (!visible.length) {
+    return (
+      <div className="rounded-2xl bg-stone-50 px-3 py-4 text-center text-xs text-stone-400">
+        Ingen innsidehandler lagret ennå.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
+      <table className="w-full table-fixed text-left">
+        <thead className="bg-stone-50 text-[9px] uppercase tracking-[0.08em] text-stone-400">
+          <tr>
+            <th className="w-[13%] px-2 py-2 font-semibold">Dato</th>
+            <th className="w-[15%] px-1 py-2 font-semibold">Selskap</th>
+            <th className="w-[13%] px-1 py-2 font-semibold">Type</th>
+            <th className="w-[25%] px-1 py-2 font-semibold">Stilling</th>
+            <th className="w-[17%] px-1 py-2 text-right font-semibold">Aksjer</th>
+            <th className="w-[17%] px-2 py-2 text-right font-semibold">Pris</th>
+          </tr>
+        </thead>
+        <tbody>
+          {visible.map((trade) => (
+            <tr key={trade.id || trade.messageId || trade.messageUrl} className="border-t border-stone-100">
+              <td className="px-2 py-1.5 text-[10px] tabular-nums text-stone-500">{formatShortDate(trade.date)}</td>
+              <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">{trade.issuerId}</td>
+              <td className="px-1 py-1.5"><TypeBadge type={trade.type} /></td>
+              <td className="truncate px-1 py-1.5 text-[10px] text-stone-500">{trade.personRole || "—"}</td>
+              <td className="px-1 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatShares(trade.shares)}</td>
+              <td className="px-2 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatPrice(trade.pricePerShare)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function InsiderTradesOverlay({ onClose, insiderState }) {
+  return (
+    <Overlay
+      title="Innsidehandler"
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={insiderState.sourceUrl || "https://newsweb.oslobors.no/search?category=1102"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne NewsWeb
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
+        {insiderState.status === "ok"
+          ? `Siste uke: ${insiderState.week.length} meldinger.`
+          : insiderState.status === "loading"
+            ? "Leser innsidehandler fra Supabase..."
+            : insiderState.message || "Ingen innsidehandler lagret ennå. Kjør /api/insider-trades?action=update."}
+      </div>
+      <div className="max-h-[52vh] overflow-y-auto pr-1">
+        <InsiderTradesTable trades={insiderState.week} />
+      </div>
+    </Overlay>
+  );
+}
+
 function YieldOverlay({ onClose, yieldState }) {
   const rows = yieldState.rows || fallbackYieldState.rows;
 
@@ -462,8 +573,10 @@ function YieldOverlay({ onClose, yieldState }) {
 
 export default function MarketDashboardPrototype() {
   const [selectedFx, setSelectedFx] = useState(null);
+  const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
+  const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
   const [swapsState, setSwapsState] = useState(fallbackSwaps);
   const [fxState, setFxState] = useState({
     status: "loading",
@@ -479,6 +592,37 @@ export default function MarketDashboardPrototype() {
 
   useEffect(() => {
     let cancelled = false;
+
+    async function loadInsiderTrades() {
+      try {
+        const response = await fetch(`/api/insider-trades?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente innsidehandler.");
+        }
+
+        if (!cancelled) {
+          setInsiderState({
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "Oslo Børs NewsWeb",
+            sourceUrl: payload.sourceUrl || "https://newsweb.oslobors.no/search?category=1102",
+            fetchedAt: payload.fetchedAt,
+            message: payload.message || null,
+            latest: payload.latest || [],
+            week: payload.week || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setInsiderState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente innsidehandler.",
+          }));
+        }
+      }
+    }
 
     async function loadSwaps() {
       try {
@@ -642,6 +786,7 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    loadInsiderTrades();
     loadSwaps();
     loadFx();
     loadStibor();
@@ -654,16 +799,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = insiderState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -698,6 +843,13 @@ export default function MarketDashboardPrototype() {
   }, [swapsState.status, fxState.status, stiborState.status, niborState.status, yieldState.status, hasError]);
 
   const warningContent = useMemo(() => {
+    if (insiderState.status === "error") {
+      return {
+        title: "Innsidehandler feilet",
+        message: insiderState.message || "Kunne ikke lese innsidehandler fra NewsWeb/Supabase.",
+      };
+    }
+
     if (swapsState.status === "error") {
       return {
         title: "SEB swap-kilde feilet",
@@ -958,6 +1110,7 @@ export default function MarketDashboardPrototype() {
       </div>
 
       {selectedFx && <FxOverlay pair={selectedFx} onClose={() => setSelectedFx(null)} />}
+      {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>
   );

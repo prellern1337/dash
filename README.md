@@ -1,8 +1,30 @@
-# Marked Dashboard PWA — warning only on errors
+# Marked Dashboard PWA — insider trades tile
 
-Denne pakken gjør én UI-endring:
+Denne pakken legger til en bred tile for innsidehandler.
 
-- Varslingsboksen øverst vises ikke lenger når alt er OK.
-- Den vises kun ved faktiske problemer, f.eks. feilet kilde, stale data eller manglende initialisering.
+## Ny API
 
-Bygger videre på Akershus-yield-fixen.
+`/api/insider-trades`
+
+- GET: leser siste lagrede handler fra Supabase
+- GET `?action=update`: henter fra NewsWeb og lagrer i Supabase
+
+## UI
+
+Bred tile:
+- Dato
+- Selskap
+- Type
+- Stilling
+- Aksjer
+- Pris
+
+Overlay:
+- siste uke
+- scrollbar
+
+## Workflow
+
+`.github/workflows/update-insider-trades.yml`
+
+Kjører 4 ganger daglig på hverdager og kan kjøres manuelt.

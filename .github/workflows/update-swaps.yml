@@ -16,4 +16,6 @@ jobs:
     steps:
       - name: Trigger Vercel SEB swap update
         run: |
-          curl -fsS "https://dash-martin-mogstad-s-projects.vercel.app/api/update-swaps"
+  curl -fsS \
+    -H "x-vercel-protection-bypass: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}" \
+    "https://dash-martin-mogstad-s-projects.vercel.app/api/update-swaps"

@@ -1,20 +1,29 @@
-# Marked Dashboard PWA — no-store metrics fix
+# Marked Dashboard PWA — SEB swaps to Supabase
 
-Dette fikser at dashboardet eller `/api/nibor` kan vise gammel NIBOR/STIBOR etter at ny verdi er lagret.
+Denne pakken flytter SEB swap-renter fra live pageload-scraping til Supabase-lagring.
 
-## Endringer
+## Flyt
 
-- `/api/nibor` bruker `Cache-Control: no-store, max-age=0`
-- `/api/stibor` bruker `Cache-Control: no-store, max-age=0`
-- Frontend henter:
-  - `/api/nibor?ts=...`
-  - `/api/stibor?ts=...`
-  med `cache: "no-store"`
-- `/api/update-rates` beholder direct-handler fixen
-- STIBOR vises med 2 desimaler
+- `/api/update-swaps`
+  - åpner SEB swap-siden med headless browser
+  - henter Swap [NOK] og Swap [SEK]
+  - lagrer 3Y, 5Y, 10Y for NOK/SEK i Supabase
+
+- `/api/swaps`
+  - leser siste lagrede swap-renter fra Supabase
+  - raskt for dashboardet
+
+- `.github/workflows/update-swaps.yml`
+  - kjører 4 ganger daglig mandag-fredag
+  - trigger `/api/update-swaps`
 
 ## Test etter deploy
 
-1. `/api/health` skal vise `package: no-store-metrics-fix`
-2. `/api/nibor?ts=123` skal vise siste lagrede NIBOR, f.eks. 4.56
-3. Refresh dashboardet
+1. `/api/health`
+2. `/api/update-swaps`
+3. `/api/swaps`
+4. Refresh dashboardet
+
+## Historikk
+
+Alle swap-oppdateringer lagres i `market_metrics`, så vi kan senere lage historiske grafer per tenor/valuta.

@@ -508,7 +508,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadSwaps() {
       try {
-        const response = await fetch("/api/swaps");
+        const response = await fetch(`/api/swaps?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {

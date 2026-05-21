@@ -3,8 +3,8 @@ export default async function handler(request, response) {
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "no-store-metrics-fix",
-    note: "NIBOR/STIBOR read endpoints and frontend fetches bypass cache.",
+    package: "seb-swaps-supabase-github-actions",
+    swaps: "SEB -> /api/update-swaps -> Supabase; /api/swaps reads Supabase",
     generatedAt: new Date().toISOString()
   })
 }

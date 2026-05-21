@@ -1,18 +1,19 @@
-# Marked Dashboard PWA — yield warning UI fix
+# Marked Dashboard PWA — Akershus debug
 
-Denne pakken endrer kun frontend-varselet som fortsatt sa at Newsec og Akershus ikke var koblet på.
+Denne pakken legger til et midlertidig debug-endepunkt:
 
-## Endring
+```text
+/api/debug-akershus-yields
+```
 
-Varselteksten er endret fra:
+Det skriver ikke til Supabase. Det viser:
+- hvilke Akershus-elementer som finnes
+- hva som skjer etter klikk på Kontor/Logistikk/Handel/Lager/Retail/Office
+- yield-kandidater i teksten
+- relevante nettverksresponser
 
-"Newsec og Akershus Eiendom er ikke koblet på ennå..."
+## Test
 
-til en nøytral aktiv-status:
-
-"Prime yield hentes nå fra UNION, Newsec og Akershus..."
-
-## Test etter deploy
-
-1. `/api/health` skal vise `package: yield-warning-ui-fix`
-2. Refresh dashboardet
+1. `/api/health` skal vise `package: akershus-debug`
+2. Kjør `/api/debug-akershus-yields`
+3. Send JSON-responsen tilbake for analyse

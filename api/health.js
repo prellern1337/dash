@@ -3,8 +3,8 @@ export default async function handler(request, response) {
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "yield-warning-ui-fix",
-    yields: "Removed outdated Newsec/Akershus not-connected frontend warning.",
+    package: "akershus-debug",
+    debugEndpoint: "/api/debug-akershus-yields",
     generatedAt: new Date().toISOString()
   })
 }

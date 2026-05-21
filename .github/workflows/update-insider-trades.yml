@@ -1,0 +1,23 @@
+name: Update insider trades
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs Monday-Friday at 07:45, 10:45, 13:15 and 15:15 UTC.
+    # Approx. 09:45, 12:45, 15:15 and 17:15 Norway summer time.
+    - cron: '45 7,10 * * 1-5'
+    - cron: '15 13,15 * * 1-5'
+
+jobs:
+  update-insider-trades:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Vercel insider trades update
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          curl -fsS \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            "https://dash-martin-mogstad-s-projects.vercel.app/api/insider-trades?action=update"

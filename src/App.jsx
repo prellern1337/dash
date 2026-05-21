@@ -769,8 +769,8 @@ export default function MarketDashboardPrototype() {
     }
 
     return {
-      title: "Neste datakilder",
-      message: "Newsec og Akershus Eiendom er ikke koblet på ennå. De vises derfor som tomme i yield-tabellen.",
+      title: "Datakilder aktive",
+      message: "Prime yield hentes nå fra UNION, Newsec og Akershus. Eventuelle kildefeil vises her når de oppstår.",
     };
   }, [
     swapsState.status,

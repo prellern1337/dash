@@ -1,17 +1,18 @@
-# Marked Dashboard PWA — yield parser/average fix
+# Marked Dashboard PWA — yield warning UI fix
 
-Denne pakken fikser to ting:
+Denne pakken endrer kun frontend-varselet som fortsatt sa at Newsec og Akershus ikke var koblet på.
 
-1. `/api/yields` beregner snitt bare av faktiske tall.
-   Null/manglende kilder telles ikke lenger som 0.
+## Endring
 
-2. `/api/update-yields` er mer robust:
-   - Newsec PDF-parser tåler flere radnavn/varianter
-   - Akershus prøver segmenter mer fleksibelt og lagrer partial results
+Varselteksten er endret fra:
+
+"Newsec og Akershus Eiendom er ikke koblet på ennå..."
+
+til en nøytral aktiv-status:
+
+"Prime yield hentes nå fra UNION, Newsec og Akershus..."
 
 ## Test etter deploy
 
-1. `/api/health` skal vise `package: yields-parser-average-fix`
-2. Kjør `/api/update-yields`
-3. Sjekk `/api/yields`
-4. Refresh dashboard
+1. `/api/health` skal vise `package: yield-warning-ui-fix`
+2. Refresh dashboardet

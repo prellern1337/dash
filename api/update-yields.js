@@ -133,35 +133,67 @@ function findLatestNewsecPdf(html) {
   return candidates[0];
 }
 
-function findLabelIndex(text, labels) {
-  const lower = text.toLowerCase();
-  for (const label of labels) {
-    const index = lower.indexOf(label.toLowerCase());
-    if (index >= 0) return { index, label };
-  }
-  return { index: -1, label: null };
+function lineIncludesAnyLabel(line, labels) {
+  const lower = line.toLowerCase();
+  return labels.find((label) => lower.includes(label.toLowerCase())) || null;
 }
 
 function extractNewsecRowValue(text, rowLabels) {
   const labels = Array.isArray(rowLabels) ? rowLabels : [rowLabels];
+  const rawLines = String(text || "")
+    .replace(/\u0000/g, " ")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+
+  // First try exact line matching. The Newsec PDF parser keeps one row per line,
+  // and this avoids accidentally reading numbers from following rows.
+  for (const line of rawLines) {
+    const matchedLabel = lineIncludesAnyLabel(line, labels);
+    if (!matchedLabel) continue;
+
+    const values = line
+      .slice(line.toLowerCase().indexOf(matchedLabel.toLowerCase()) + matchedLabel.length)
+      .match(/[-+]?\d+(?:[,.]\d+)?/g)
+      ?.map(parseNumber)
+      .filter((value) => Number.isFinite(value) && value > 0 && value < 20);
+
+    if (values && values.length >= 2) {
+      // Latest quarter low/high are the final two values in the row; we want Low.
+      return values[values.length - 2];
+    }
+  }
+
+  // Fallback: compact text, but cut at the next known row label to avoid row bleed.
   const clean = normaliseText(text);
-  const { index, label } = findLabelIndex(clean, labels);
+  const lower = clean.toLowerCase();
 
-  if (index < 0) {
-    throw new Error(`Fant ikke Newsec-raden: ${labels.join(" / ")}.`);
+  for (const label of labels) {
+    const index = lower.indexOf(label.toLowerCase());
+    if (index < 0) continue;
+
+    const nextLabelRegex = /(Office Oslo centre|Office Oslo Skøyen|Office Oslo Lysaker|Office Oslo East|Office Oslo South|Office Stavanger|Office Bergen|Office Trondheim|Office Other Cities|Retail Prime|Retail Normal|Retail Secondary|Retail Big Box|Logistics Prime|Logistics Normal|Hotel Prime|Residential)/ig;
+    let endIndex = clean.length;
+    let match;
+    nextLabelRegex.lastIndex = index + label.length;
+
+    while ((match = nextLabelRegex.exec(clean)) !== null) {
+      if (match.index > index + label.length + 5) {
+        endIndex = match.index;
+        break;
+      }
+    }
+
+    const slice = clean.slice(index + label.length, Math.min(endIndex, index + label.length + 260));
+    const values = slice
+      .match(/[-+]?\d+(?:[,.]\d+)?/g)
+      ?.map(parseNumber)
+      .filter((value) => Number.isFinite(value) && value > 0 && value < 20);
+
+    if (values && values.length >= 2) return values[values.length - 2];
   }
 
-  const slice = clean.slice(index + label.length, index + label.length + 360);
-  const values = slice
-    .match(/[-+]?\d+(?:[,.]\d+)?/g)
-    ?.map(parseNumber)
-    .filter((value) => Number.isFinite(value) && value > 0 && value < 20);
-
-  if (!values || values.length < 2) {
-    throw new Error(`Kunne ikke parse Newsec-raden: ${labels.join(" / ")}.`);
-  }
-
-  return values[values.length - 2];
+  throw new Error(`Fant ikke/kunne ikke parse Newsec-raden: ${labels.join(" / ")}.`);
 }
 
 async function fetchNewsecYields() {
@@ -311,6 +343,25 @@ async function fetchAkershusYields() {
           message: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+
+    // If all three segment values are identical, the page click likely did not
+    // change segment content and we would otherwise save the office value for
+    // Handel/Logistikk. Keep office if present, but reject non-office values.
+    const uniqueValues = Array.from(new Set(results.map((result) => Number(result.value).toFixed(2))));
+    if (results.length >= 3 && uniqueValues.length === 1) {
+      const office = results.find((result) => result.segment === "office") || null;
+      const rejected = results.filter((result) => result.segment !== "office");
+
+      for (const result of rejected) {
+        errors.push({
+          source: "akershus",
+          segment: result.segment,
+          message: "Akershus segmentklikk ga samme verdi for alle segmenter. Verdien forkastes for å unngå feil svar.",
+        });
+      }
+
+      return { results: office ? [office] : [], errors };
     }
 
     return { results, errors };

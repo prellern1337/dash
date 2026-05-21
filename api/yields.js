@@ -77,12 +77,12 @@ export default async function handler(request, response) {
 
         sources[source.key] = {
           source: source.label,
-          value: latestGood ? Number(latestGood.value) : null,
-          fetchedAt: latestGood?.fetched_at || null,
+          value: latestGood && !hasNewerError ? Number(latestGood.value) : null,
+          fetchedAt: latestGood && !hasNewerError ? latestGood.fetched_at : null,
           sourceName: latestGood?.source_name || source.label,
           sourceUrl: latestGood?.source_url || null,
           sourceDocument: latestGood?.source_document || null,
-          status: latestGood ? (hasNewerError ? "stale" : "ok") : "empty",
+          status: latestGood ? (hasNewerError ? "error" : "ok") : "empty",
           message: hasNewerError ? latestRun.message : null,
         };
       }

@@ -38,7 +38,6 @@ export default async function handler(request, response) {
   }
 
   const hasError = results.some((result) => result.status === "error");
-
   response.status(hasError ? 207 : 200).json({
     status: hasError ? "partial" : "ok",
     generatedAt: new Date().toISOString(),

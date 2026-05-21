@@ -1,26 +1,22 @@
-# Marked Dashboard PWA — serverless limit fix
+# Marked Dashboard PWA — STIBOR via Trading Economics
 
-Denne pakken rydder opp i Vercel Hobby-begrensningen på antall serverless functions.
+Denne pakken bruker Trading Economics som praktisk kilde for svensk 3M interbank/STIBOR.
 
-## Endringer
+## STIBOR
 
-- Fjernet midlertidige debug-endepunkter:
-  - `/api/debug-seb-swaps`
-  - `/api/debug-riksbank-stibor`
-  - `/api/debug-union-nibor`
-  - `/api/version`
-- Flyttet Supabase-helper ut av `api/_lib` til `lib/supabase.js`
-- Oppdaterte imports i API-filene
-- Beholder production-endepunktene:
-  - `/api/health`
-  - `/api/fx`
-  - `/api/swaps`
-  - `/api/yields`
-  - `/api/nibor`
-  - `/api/stibor`
-  - `/api/update-nibor`
-  - `/api/update-stibor`
-  - `/api/update-rates`
+- `/api/update-stibor`
+  - henter `https://tradingeconomics.com/sweden/interbank-rate`
+  - parser Latest/Actual Sweden Interbank Rate
+  - lagrer verdien i Supabase som `stibor_3m`
+  - merk: tallet ser avrundet ut til to desimaler hos Trading Economics
+  - Trading Economics oppgir SFBF som kilde
+
+- `/api/stibor`
+  - leser siste Trading Economics-baserte STIBOR-verdi fra Supabase
+  - hvis siste update feilet, viser den error i stedet for gammel verdi
+
+- `/api/update-rates`
+  - oppdaterer både NIBOR og STIBOR
 
 ## Test etter deploy
 

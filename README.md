@@ -1,11 +1,10 @@
-# Market Dashboard — insider tile visible fix
+# Market Dashboard — insider tile bottom + zero fix
 
-Denne pakken fikser at selve brede Innsidehandler-tilen manglet i dashboard-gridet.
+Denne pakken fikser innsidehandel-tilen:
 
-## Endringer
-
-- Selve `<Tile title="Innsidehandler">` er nå lagt inn øverst i `main`-gridet.
-- Parser-fixene fra forrige pakke er beholdt:
+- Bred Innsidehandler-tile ligger nederst i dashboard-gridet.
+- Aksjer = 0/null/ugyldig vises som `—`, ikke som `0`.
+- Parser-fixene er beholdt:
   - IssuerID leses fra meldingssiden
   - 1,200 / 9,000 tolkes som 1200 / 9000
   - parseren bruker selve meldingsinnholdet
@@ -15,4 +14,4 @@ Denne pakken fikser at selve brede Innsidehandler-tilen manglet i dashboard-grid
 1. Deploy pakken
 2. Kjør `/api/insider-trades?action=update`
 3. Kjør `/api/insider-trades`
-4. Refresh dashboardet / test i inkognito
+4. Refresh dashboardet, gjerne med `?v=insider-bottom`

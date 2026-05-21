@@ -205,7 +205,7 @@ function formatShortDate(value) {
 }
 
 function formatShares(value) {
-  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) || Number(value) <= 0) return "—";
   return new Intl.NumberFormat("no-NO", { maximumFractionDigits: 0 }).format(Number(value));
 }
 
@@ -1000,20 +1000,6 @@ export default function MarketDashboardPrototype() {
         </section>
 
         <main className="grid grid-cols-2 gap-3">
-          <Tile
-            title="Innsidehandler"
-            source="NewsWeb"
-            accent="amber"
-            icon={<BriefcaseBusiness size={17} />}
-            onClick={() => setShowInsiderTrades(true)}
-            size="insider"
-            wide
-          >
-            <div className="mt-2">
-              <InsiderTradesTable trades={insiderState.latest.slice(0, 10)} compact />
-            </div>
-          </Tile>
-
           <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large">
             <RateStack
               rows={[
@@ -1116,6 +1102,21 @@ export default function MarketDashboardPrototype() {
             accent="slate"
             icon={<BriefcaseBusiness size={17} />}
           />
+
+          <Tile
+            title="Innsidehandler"
+            source="NewsWeb"
+            accent="amber"
+            icon={<BriefcaseBusiness size={17} />}
+            onClick={() => setShowInsiderTrades(true)}
+            size="insider"
+            wide
+          >
+            <div className="mt-2">
+              <InsiderTradesTable trades={insiderState.latest.slice(0, 10)} compact />
+            </div>
+          </Tile>
+
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">

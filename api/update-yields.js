@@ -269,13 +269,23 @@ async function renderAkershusPage() {
   }
 }
 
-function extractAkershusPrimeYield(text, label) {
-  const clean = normaliseText(text);
+function extractAkershusPrimeYield(segmentText, segment) {
+  const clean = normaliseText(segmentText);
 
-  const patterns = [
-    /Prime\s+yield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-    /Primeyield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
-  ];
+  const patternsBySegment = {
+    office: [
+      /Prime\s+yield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    ],
+    logistics: [
+      /Prime\s+yield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    ],
+    retail: [
+      /Prime\s+yield\s+high\s+street\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+      /Prime\s+yield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i,
+    ],
+  };
+
+  const patterns = patternsBySegment[segment] || [/Prime\s+yield\s+([-+]?\d+(?:[,.]\d+)?)\s*%/i];
 
   for (const pattern of patterns) {
     const match = clean.match(pattern);
@@ -285,25 +295,50 @@ function extractAkershusPrimeYield(text, label) {
     if (Number.isFinite(value) && value > 0 && value < 20) return value;
   }
 
-  throw new Error(`Fant ikke Akershus prime yield for ${label}.`);
+  throw new Error(`Fant ikke Akershus prime yield for ${segment}.`);
+}
+
+async function getAkershusSegmentText(page) {
+  return await page.evaluate(() => {
+    const section = document.querySelector("#segment-dive");
+    return section ? section.innerText : (document.body ? document.body.innerText : "");
+  });
 }
 
 async function clickAkershusSegment(page, label) {
   const clicked = await page.evaluate((wanted) => {
-    const candidates = Array.from(document.querySelectorAll("button, a, [role='button'], div, span"));
-    const target = candidates.find((el) => {
-      const text = (el.innerText || el.textContent || "").trim().toLowerCase();
-      return text === wanted.toLowerCase() || text.includes(wanted.toLowerCase());
-    });
-    if (target) {
-      target.click();
-      return true;
-    }
-    return false;
+    const scope = document.querySelector("#segment-dive") || document;
+    const wantedText = String(wanted || "").trim().toLowerCase();
+
+    const candidates = Array.from(scope.querySelectorAll("button, [role='button'], a"))
+      .map((el, index) => {
+        const text = (el.innerText || el.textContent || el.getAttribute("aria-label") || "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .toLowerCase();
+        return { el, index, text };
+      })
+      .filter((item) => item.text);
+
+    const target =
+      candidates.find((item) => item.text === wantedText) ||
+      candidates.find((item) => item.text.includes(wantedText));
+
+    if (!target) return { clicked: false, label: wanted };
+
+    target.el.scrollIntoView({ block: "center", inline: "center" });
+    target.el.click();
+
+    return {
+      clicked: true,
+      label: wanted,
+      index: target.index,
+      text: target.text,
+    };
   }, label);
 
-  await new Promise((resolve) => setTimeout(resolve, clicked ? 1200 : 600));
-  return clicked;
+  await new Promise((resolve) => setTimeout(resolve, clicked.clicked ? 1400 : 600));
+  return clicked.clicked;
 }
 
 async function fetchAkershusYields() {
@@ -324,8 +359,8 @@ async function fetchAkershusYields() {
           if (clicked) break;
         }
 
-        const text = await page.evaluate(() => document.body ? document.body.innerText : "");
-        const value = extractAkershusPrimeYield(text, label);
+        const segmentText = await getAkershusSegmentText(page);
+        const value = extractAkershusPrimeYield(segmentText, segment);
 
         results.push({
           source: "akershus",
@@ -333,8 +368,8 @@ async function fetchAkershusYields() {
           value,
           sourceName: "Akershus Eiendom",
           sourceUrl: AKERSHUS_URL,
-          sourceDocument: `Segmentoversikt ${label}`,
-          method: clicked ? "akershus_rendered_page_click" : "akershus_rendered_page_default",
+          sourceDocument: segment === "retail" ? "Segmentoversikt Handel - high street" : `Segmentoversikt ${label}`,
+          method: clicked ? "akershus_segment_dive_click" : "akershus_segment_dive_default",
         });
       } catch (error) {
         errors.push({
@@ -343,25 +378,6 @@ async function fetchAkershusYields() {
           message: error instanceof Error ? error.message : String(error),
         });
       }
-    }
-
-    // If all three segment values are identical, the page click likely did not
-    // change segment content and we would otherwise save the office value for
-    // Handel/Logistikk. Keep office if present, but reject non-office values.
-    const uniqueValues = Array.from(new Set(results.map((result) => Number(result.value).toFixed(2))));
-    if (results.length >= 3 && uniqueValues.length === 1) {
-      const office = results.find((result) => result.segment === "office") || null;
-      const rejected = results.filter((result) => result.segment !== "office");
-
-      for (const result of rejected) {
-        errors.push({
-          source: "akershus",
-          segment: result.segment,
-          message: "Akershus segmentklikk ga samme verdi for alle segmenter. Verdien forkastes for å unngå feil svar.",
-        });
-      }
-
-      return { results: office ? [office] : [], errors };
     }
 
     return { results, errors };

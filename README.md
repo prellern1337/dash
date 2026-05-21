@@ -1,19 +1,20 @@
-# Marked Dashboard PWA — Akershus debug
+# Marked Dashboard PWA — Akershus yield fix
 
-Denne pakken legger til et midlertidig debug-endepunkt:
+Denne pakken fikser Akershus-yieldene ved å lese kun teksten i `#segment-dive`
+etter segmentklikk, i stedet for hele siden.
 
-```text
-/api/debug-akershus-yields
-```
+## Akershus mapping
 
-Det skriver ikke til Supabase. Det viser:
-- hvilke Akershus-elementer som finnes
-- hva som skjer etter klikk på Kontor/Logistikk/Handel/Lager/Retail/Office
-- yield-kandidater i teksten
-- relevante nettverksresponser
+- Kontor: første `Prime yield` i Kontor-segmentet
+- Logistikk: første `Prime yield` i Logistikk-segmentet
+- Handel: `Prime yield high street`
 
-## Test
+Debug-outputen viste at:
+- Logistikk-segmentet har `Prime yield 5,25%`
+- Handel-segmentet har `Prime yield high street 4,50%`, `Prime yield kjøpesenter 5,75%` og `Prime yield big box 5,75%`
 
-1. `/api/health` skal vise `package: akershus-debug`
-2. Kjør `/api/debug-akershus-yields`
-3. Send JSON-responsen tilbake for analyse
+## Test etter deploy
+
+1. `/api/health` skal vise `package: akershus-yield-fix`
+2. Kjør `/api/update-yields`
+3. Sjekk `/api/yields`

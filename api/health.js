@@ -3,8 +3,8 @@ export default async function handler(request, response) {
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "akershus-debug",
-    debugEndpoint: "/api/debug-akershus-yields",
+    package: "akershus-yield-fix",
+    yields: "Akershus segment-dive extraction fixed for office/logistics/retail high street.",
     generatedAt: new Date().toISOString()
   })
 }

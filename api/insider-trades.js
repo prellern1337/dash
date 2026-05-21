@@ -197,7 +197,7 @@ async function renderSearchPage(url) {
     await page.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9,nb-NO;q=0.8,nb;q=0.7" });
 
     await page.goto(url, { waitUntil: "networkidle2", timeout: 45000 });
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    await new Promise((resolve) => setTimeout(resolve, 450));
 
     const links = await page.evaluate(() => {
       function closestUsefulText(el) {
@@ -217,7 +217,7 @@ async function renderSearchPage(url) {
           rowText: closestUsefulText(a),
         }))
         .filter((item) => item.href)
-        .slice(0, 40);
+        .slice(0, 16);
     });
 
     return { browser, page, links };
@@ -229,7 +229,7 @@ async function renderSearchPage(url) {
 
 async function scrapeMessage(page, link) {
   await page.goto(link.href, { waitUntil: "networkidle2", timeout: 45000 });
-  await new Promise((resolve) => setTimeout(resolve, 1200));
+  await new Promise((resolve) => setTimeout(resolve, 450));
 
   const payload = await page.evaluate(() => ({
     title: document.title,
@@ -279,8 +279,12 @@ async function scrapeNewswebInsiders(daysBack = 14) {
       return true;
     });
 
+    if (!uniqueLinks.length) {
+      throw new Error("Fant ingen NewsWeb-meldingslenker i søkeresultatet. NewsWeb kan ha endret struktur eller blokkert rendering.");
+    }
+
     const trades = [];
-    for (const link of uniqueLinks.slice(0, 25)) {
+    for (const link of uniqueLinks.slice(0, 10)) {
       try {
         const trade = await scrapeMessage(page, link);
         trades.push(trade);
@@ -313,7 +317,7 @@ async function updateInsiderTrades(request, response) {
   const fetchedAt = new Date().toISOString();
 
   try {
-    const { searchUrl: url, trades } = await scrapeNewswebInsiders(21);
+    const { searchUrl: url, trades } = await scrapeNewswebInsiders(14);
     const saved = [];
 
     for (const trade of trades) {
@@ -353,7 +357,7 @@ async function updateInsiderTrades(request, response) {
       value: null,
       unit: null,
       source_name: "Oslo Børs NewsWeb",
-      source_url: searchUrl(21),
+      source_url: searchUrl(14),
       source_document: "NewsWeb search category 1102",
       observed_date: null,
       fetched_at: fetchedAt,

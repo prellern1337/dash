@@ -1,30 +1,19 @@
-# Marked Dashboard PWA — insider trades tile
+# Market Dashboard — insider trades timeout fix
 
-Denne pakken legger til en bred tile for innsidehandler.
+Denne pakken gjør innsidehandel-endepunktet lettere slik at det ikke timeouter på Vercel.
 
-## Ny API
+## Endringer
 
-`/api/insider-trades`
+- `/api/insider-trades?action=update` scraper maks 10 meldinger per kjøring
+- kortere ventetider i headless browser
+- søker 14 dager bakover
+- `/api/health` er fjernet for å holde oss under Vercel Hobby-grensen
 
-- GET: leser siste lagrede handler fra Supabase
-- GET `?action=update`: henter fra NewsWeb og lagrer i Supabase
+## Test
 
-## UI
+1. Deploy pakken
+2. Kjør `/api/insider-trades?action=update`
+3. Kjør `/api/insider-trades`
+4. Refresh dashboardet
 
-Bred tile:
-- Dato
-- Selskap
-- Type
-- Stilling
-- Aksjer
-- Pris
-
-Overlay:
-- siste uke
-- scrollbar
-
-## Workflow
-
-`.github/workflows/update-insider-trades.yml`
-
-Kjører 4 ganger daglig på hverdager og kan kjøres manuelt.
+Hvis workflow fortsatt gir 504, må vi splitte jobben i enda mindre steg eller flytte selve NewsWeb-scrapingen til GitHub Actions.

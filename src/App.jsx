@@ -918,12 +918,12 @@ export default function MarketDashboardPrototype() {
           <Tile
             title="3M STIBOR"
             source={stiborState.sourceName}
-            value={hasNumericValue(stiborState.value) ? formatNumber(stiborState.value, 3) : "—"}
+            value={hasNumericValue(stiborState.value) ? formatNumber(stiborState.value, 2) : "—"}
             unit="%"
             subtitle={
               stiborState.status === "ok"
                 ? stiborState.observedDate
-                  ? `Dato: ${stiborState.observedDate}`
+                  ? `TE / SFBF · ${stiborState.observedDate}`
                   : `Lagret: ${formatDateTimeShort(stiborState.fetchedAt)}`
                 : stiborState.status === "stale"
                   ? `Sist vellykket: ${formatDateTimeShort(stiborState.fetchedAt)}`

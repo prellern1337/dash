@@ -1,22 +1,13 @@
-# Marked Dashboard PWA — STIBOR via Trading Economics
+# Marked Dashboard PWA — update-rates direct + STIBOR UI fix
 
-Denne pakken bruker Trading Economics som praktisk kilde for svensk 3M interbank/STIBOR.
+## Endringer
 
-## STIBOR
-
-- `/api/update-stibor`
-  - henter `https://tradingeconomics.com/sweden/interbank-rate`
-  - parser Latest/Actual Sweden Interbank Rate
-  - lagrer verdien i Supabase som `stibor_3m`
-  - merk: tallet ser avrundet ut til to desimaler hos Trading Economics
-  - Trading Economics oppgir SFBF som kilde
-
-- `/api/stibor`
-  - leser siste Trading Economics-baserte STIBOR-verdi fra Supabase
-  - hvis siste update feilet, viser den error i stedet for gammel verdi
-
-- `/api/update-rates`
-  - oppdaterer både NIBOR og STIBOR
+- `/api/update-rates` kaller update-funksjonene direkte i kode:
+  - `/api/update-nibor`
+  - `/api/update-stibor`
+- Dette unngår 401-feil fra interne HTTP-kall i Vercel.
+- STIBOR vises med 2 desimaler, fordi Trading Economics-kilden er avrundet til 2 desimaler.
+- STIBOR subtitle viser `TE / SFBF · dato`.
 
 ## Test etter deploy
 

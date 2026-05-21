@@ -1,43 +1,52 @@
-export default async function handler(request, response) {
-  const host = request.headers["x-forwarded-host"] || request.headers.host;
-  const protocol = request.headers["x-forwarded-proto"] || "https";
-  const origin = `${protocol}://${host}`;
+import updateNibor from "./update-nibor.js";
+import updateStibor from "./update-stibor.js";
 
-  const endpoints = [
-    { key: "nibor_3m", path: "/api/update-nibor" },
-    { key: "stibor_3m", path: "/api/update-stibor" },
-  ];
+async function callApiHandler(handler, label) {
+  return new Promise((resolve) => {
+    const request = {
+      headers: {},
+      method: "GET",
+      query: {},
+    };
 
-  const results = [];
+    const response = {
+      statusCode: 200,
+      headers: {},
+      setHeader(key, value) {
+        this.headers[key] = value;
+      },
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        resolve({
+          key: label,
+          httpStatus: this.statusCode,
+          ...payload,
+        });
+      },
+    };
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(`${origin}${endpoint.path}`, {
-        headers: { "User-Agent": "MarketDashboardCron/1.0" },
-      });
-
-      const payload = await res.json().catch(() => ({
-        status: "error",
-        message: "Kunne ikke parse JSON-respons.",
-      }));
-
-      results.push({
-        key: endpoint.key,
-        path: endpoint.path,
-        httpStatus: res.status,
-        ...payload,
-      });
-    } catch (error) {
-      results.push({
-        key: endpoint.key,
-        path: endpoint.path,
+    Promise.resolve(handler(request, response)).catch((error) => {
+      resolve({
+        key: label,
+        httpStatus: 500,
         status: "error",
         message: error instanceof Error ? error.message : String(error),
       });
-    }
-  }
+    });
+  });
+}
+
+export default async function handler(request, response) {
+  const results = await Promise.all([
+    callApiHandler(updateNibor, "nibor_3m"),
+    callApiHandler(updateStibor, "stibor_3m"),
+  ]);
 
   const hasError = results.some((result) => result.status === "error");
+
   response.status(hasError ? 207 : 200).json({
     status: hasError ? "partial" : "ok",
     generatedAt: new Date().toISOString(),

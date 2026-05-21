@@ -44,6 +44,7 @@ export default async function handler(request, response) {
     const { latestGood, latestRun } = await getLatestRows();
 
     if (!latestGood) {
+      response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
         status: "empty",
         metricKey: METRIC_KEY,
@@ -68,6 +69,7 @@ export default async function handler(request, response) {
       new Date(latestRun.fetched_at).getTime() > new Date(latestGood.fetched_at).getTime();
 
     if (latestRunIsNewerError) {
+      response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
         status: "error",
         metricKey: METRIC_KEY,
@@ -91,6 +93,7 @@ export default async function handler(request, response) {
 
     const age = daysSince(latestGood.observed_date);
     if (latestGood.observed_date && age > MAX_STIBOR_AGE_DAYS) {
+      response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
         status: "error",
         metricKey: METRIC_KEY,
@@ -107,8 +110,8 @@ export default async function handler(request, response) {
       return;
     }
 
-    response.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=3600");
-    response.status(200).json({
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+      response.status(200).json({
       status: "ok",
       metricKey: METRIC_KEY,
       tenor: "3M",

@@ -1,11 +1,10 @@
 export default async function handler(request, response) {
+  response.setHeader("Cache-Control", "no-store, max-age=0");
   response.status(200).json({
     status: "ok",
     app: "market-dashboard",
-    package: "update-rates-direct-ui-fix",
-    stiborSource: "Trading Economics Sweden Interbank Rate",
-    stiborDisplay: "2 decimals",
-    updateRates: "direct handler invocation, no internal HTTP",
+    package: "no-store-metrics-fix",
+    note: "NIBOR/STIBOR read endpoints and frontend fetches bypass cache.",
     generatedAt: new Date().toISOString()
   })
 }

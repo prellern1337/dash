@@ -571,7 +571,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadStibor() {
       try {
-        const response = await fetch("/api/stibor");
+        const response = await fetch(`/api/stibor?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -605,7 +605,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadNibor() {
       try {
-        const response = await fetch("/api/nibor");
+        const response = await fetch(`/api/nibor?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {

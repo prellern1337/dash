@@ -7,6 +7,7 @@ export default async function handler(request, response) {
     const { latestGood, latestRun } = await getLatestMetric(METRIC_KEY);
 
     if (!latestGood) {
+      response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
         status: "empty",
         metricKey: METRIC_KEY,
@@ -23,8 +24,8 @@ export default async function handler(request, response) {
       latestRun.status !== "ok" &&
       new Date(latestRun.fetched_at).getTime() > new Date(latestGood.fetched_at).getTime();
 
-    response.setHeader("Cache-Control", "s-maxage=900, stale-while-revalidate=3600");
-    response.status(200).json({
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+      response.status(200).json({
       status: latestRunIsNewerError ? "stale" : "ok",
       metricKey: METRIC_KEY,
       tenor: "3M",

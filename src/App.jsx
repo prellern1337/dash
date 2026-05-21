@@ -768,10 +768,7 @@ export default function MarketDashboardPrototype() {
       };
     }
 
-    return {
-      title: "Datakilder aktive",
-      message: "Prime yield hentes nå fra UNION, Newsec og Akershus. Eventuelle kildefeil vises her når de oppstår.",
-    };
+    return null;
   }, [
     swapsState.status,
     swapsState.message,
@@ -811,7 +808,7 @@ export default function MarketDashboardPrototype() {
         </header>
 
         <AnimatePresence>
-          {showWarning && (
+          {showWarning && warningContent && (
             <motion.div
               initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}

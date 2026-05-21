@@ -1,13 +1,12 @@
-# Market Dashboard — insider overlay links
+# Market Dashboard — insider overlay open button fix
 
 Endring:
-- Overlay-tabellen for innsidehandler har nå en egen link-kolonne.
-- Hver rad kan åpnes direkte i NewsWeb via ikon/link.
-- Tile-visningen er uendret og holder seg kompakt.
-- Beholder konservativ parser for innsidehandler.
+- I Innsidehandler-overlayen er link-ikonet byttet til en tydelig `Åpne`-knapp.
+- Knappen bruker `window.open(...)` på klikk, som er mer robust i overlay/PWA.
+- Beholder konservativ parser og tidligere STIBOR/innsidehandel-fixer.
 
 Test:
 1. Deploy pakken.
-2. Kjør `/api/insider-trades?action=update&limit=16&days=14`.
-3. Åpne dashboardet og trykk på Innsidehandler-tilen.
-4. Klikk link-ikonet på en rad i overlayen.
+2. Åpne dashboardet med `?v=insider-open-button`.
+3. Trykk Innsidehandler-tilen.
+4. Klikk `Åpne` på en rad i overlayen.

@@ -55,8 +55,29 @@ function daysSince(dateString) {
 function extractTradingEconomicsStibor(html) {
   const text = htmlToText(html);
 
-  // Main sentence currently renders like:
-  // "Interbank Rate in Sweden decreased to 2 percent on Tuesday May 19 from 2.02 in the previous day."
+  // Preferred: table/latest value. The prose can say "2 percent" while
+  // the table "Interbank Rate -> Latest" can show e.g. 2.01.
+  const tablePatterns = [
+    /Interbank Rate\s+([-+]?\d+(?:[.,]\d+)?)\s+[-+]?\d+(?:[.,]\d+)?\s+percent\b/i,
+    /Interbank Rate[\s\S]{0,120}?Latest\s+([-+]?\d+(?:[.,]\d+)?)/i,
+    /Actual Previous Highest Lowest Dates Unit Frequency\s+([-+]?\d+(?:[.,]\d+)?)/i,
+  ];
+
+  for (const pattern of tablePatterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+
+    const value = parseNumber(match[1]);
+    if (Number.isFinite(value) && value > -10 && value < 30) {
+      return {
+        value,
+        observedDate: extractTradingEconomicsObservedDate(text),
+        method: "trading_economics_latest_table",
+        rawSnippet: match[0],
+      };
+    }
+  }
+
   const sentencePattern =
     /Interbank Rate in Sweden (?:decreased|increased|remained unchanged|was unchanged|fell|rose)?\s*(?:to|at)?\s*([-+]?\d+(?:[.,]\d+)?)\s*percent\s+on\s+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?\s*([A-Za-z]+)\s+(\d{1,2})/i;
 
@@ -65,8 +86,6 @@ function extractTradingEconomicsStibor(html) {
     const value = parseNumber(sentenceMatch[1]);
     const monthName = sentenceMatch[2];
     const day = sentenceMatch[3];
-
-    // Find year close to the page title/date context. The page text includes dates range 1992 - 2026.
     const currentYear = new Date().getUTCFullYear();
     const date = normaliseDateFromText(day, monthName, currentYear);
 
@@ -80,47 +99,25 @@ function extractTradingEconomicsStibor(html) {
     }
   }
 
-  // Related table variant:
-  // "Interbank Rate 2.00 2.02 percent May 2026"
-  const tablePattern =
-    /Interbank Rate\s+([-+]?\d+(?:[.,]\d+)?)\s+[-+]?\d+(?:[.,]\d+)?\s+percent\s+([A-Za-z]+)\s+(20\d{2})/i;
-
-  const tableMatch = text.match(tablePattern);
-  if (tableMatch) {
-    const value = parseNumber(tableMatch[1]);
-    const month = monthNameToNumber(tableMatch[2]);
-    const year = tableMatch[3];
-    const date = month ? `${year}-${month}-01` : null;
-
-    if (Number.isFinite(value) && value > -10 && value < 30) {
-      return {
-        value,
-        observedDate: date,
-        method: "trading_economics_table",
-        rawSnippet: tableMatch[0],
-      };
-    }
-  }
-
-  // Summary table:
-  // "Actual Previous Highest Lowest Dates Unit Frequency 2.00 2.02 ..."
-  const actualPattern =
-    /Actual Previous Highest Lowest Dates Unit Frequency\s+([-+]?\d+(?:[.,]\d+)?)/i;
-
-  const actualMatch = text.match(actualPattern);
-  if (actualMatch) {
-    const value = parseNumber(actualMatch[1]);
-    if (Number.isFinite(value) && value > -10 && value < 30) {
-      return {
-        value,
-        observedDate: null,
-        method: "trading_economics_actual_table",
-        rawSnippet: actualMatch[0],
-      };
-    }
-  }
-
   throw new Error("Fant ikke Sweden Interbank Rate Latest på Trading Economics-siden.");
+}
+
+function extractTradingEconomicsObservedDate(textInput) {
+  const text = String(textInput || "");
+
+  const sentenceDate = text.match(/Interbank Rate in Sweden[\s\S]{0,180}?\bon\s+(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)?\s*([A-Za-z]+)\s+(\d{1,2})/i);
+  if (sentenceDate) {
+    const currentYear = new Date().getUTCFullYear();
+    return normaliseDateFromText(sentenceDate[2], sentenceDate[1], currentYear);
+  }
+
+  const monthYear = text.match(/Interbank Rate[\s\S]{0,180}?percent\s+([A-Za-z]+)\s+(20\d{2})/i);
+  if (monthYear) {
+    const month = monthNameToNumber(monthYear[1]);
+    if (month) return `${monthYear[2]}-${month}-01`;
+  }
+
+  return null;
 }
 
 async function fetchStiborFromTradingEconomics() {

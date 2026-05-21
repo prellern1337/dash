@@ -1,0 +1,22 @@
+name: Update prime yields
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs every Wednesday at 14:00 UTC.
+    # Approx. 16:00 Norway summer time / 15:00 winter time.
+    - cron: '0 14 * * 3'
+
+jobs:
+  update-yields:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Vercel prime yield update
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          curl -fsS \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            "https://dash-martin-mogstad-s-projects.vercel.app/api/update-yields"

@@ -6,21 +6,6 @@ const METRIC_KEY = "insider_trade";
 const NEWSWEB_BASE = "https://newsweb.oslobors.no";
 const CATEGORY = "1102";
 
-function clampNumber(value, fallback, min, max) {
-  const number = Number.parseInt(String(value ?? ""), 10);
-  if (!Number.isFinite(number)) return fallback;
-  return Math.max(min, Math.min(max, number));
-}
-
-function getQueryValue(request, key) {
-  if (request?.query && request.query[key] !== undefined) return request.query[key];
-  try {
-    return new URL(request.url || "https://local/api/insider-trades", "https://local").searchParams.get(key);
-  } catch {
-    return null;
-  }
-}
-
 function toIsoDate(date) {
   return date.toISOString().slice(0, 10);
 }
@@ -207,199 +192,6 @@ function extractRole(textInput) {
   return "—";
 }
 
-function hasComplexTransactionContext(textInput, titleInput = "") {
-  const text = normaliseWhitespace(`${titleInput} ${textInput}`).toLowerCase();
-
-  // These messages often include share lending, ownership disclosures, private placements,
-  // option programmes, allocations, or several simultaneous PDMR/PCA transactions.
-  // For these we avoid pretending that one number is "the" buy/sell volume.
-  const complexPatterns = [
-    /large shareholding/,
-    /share lending/,
-    /private placement/,
-    /loaned shares/,
-    /lånte aksjer/,
-    /aksjelån/,
-    /share option/,
-    /options? programme/,
-    /opsjonsprogram/,
-    /exercise of options/,
-    /utøvelse av opsjoner/,
-    /grant of share options/,
-    /tildeling av opsjoner/,
-    /long term incentive|ltip/,
-    /employee share saving/,
-    /aksjespareprogram/,
-    /allocation of shares/,
-    /tildeling av aksjer/,
-    /following transactions/,
-    /følgende transaksjoner/,
-  ];
-
-  const hasComplexPhrase = complexPatterns.some((pattern) => pattern.test(text));
-  const buy = /\b(purchased|acquired|bought|subscribed|kjøpt|ervervet|tegnet)\b/i.test(text);
-  const sell = /\b(sold|sale|disposed|disposal|solgt|salg|avhendet)\b/i.test(text);
-
-  return hasComplexPhrase || (buy && sell);
-}
-
-function splitTransactionSentences(textInput) {
-  const body = normaliseWhitespace(textInput)
-    .replace(/\s+\|\s+/g, ". ")
-    .replace(/•/g, ". ")
-    .replace(/·/g, ". ");
-
-  return body
-    .split(/(?<=[.!?])\s+|\s{2,}|;\s+/)
-    .map((sentence) => sentence.trim())
-    .filter((sentence) => sentence.length > 20 && sentence.length < 600);
-}
-
-function isHoldingOnlySentence(sentenceInput) {
-  const sentence = normaliseWhitespace(sentenceInput).toLowerCase();
-
-  return (
-    /after (?:the )?transaction/.test(sentence) ||
-    /following (?:the )?transaction/.test(sentence) ||
-    /\bholds?\b/.test(sentence) ||
-    /\bown(?:s|ed)?\b/.test(sentence) ||
-    /\beier\b/.test(sentence) ||
-    /\bbeholdning\b/.test(sentence) ||
-    /\bholding\b/.test(sentence) ||
-    /\bshareholding\b/.test(sentence) ||
-    /\breduced (?:his|her|its|their)?\s*shareholding\b/.test(sentence) ||
-    /\breduksjon i aksjebeholdning\b/.test(sentence)
-  );
-}
-
-function explicitTransactionType(sentenceInput) {
-  const sentence = normaliseWhitespace(sentenceInput).toLowerCase();
-
-  const sellPatterns = [
-    /\bsold\b/,
-    /\bsale\b/,
-    /\bdisposed\b/,
-    /\bdisposal\b/,
-    /\bsolgt\b/,
-    /\bsalg\b/,
-    /\bavhendet\b/,
-  ];
-
-  const buyPatterns = [
-    /\bpurchased\b/,
-    /\bacquired\b/,
-    /\bbought\b/,
-    /\bsubscribed\b/,
-    /\bkjøpt\b/,
-    /\bervervet\b/,
-    /\btegnet\b/,
-  ];
-
-  const isSell = sellPatterns.some((pattern) => pattern.test(sentence));
-  const isBuy = buyPatterns.some((pattern) => pattern.test(sentence));
-
-  if (isSell && !isBuy) return "Salg";
-  if (isBuy && !isSell) return "Kjøp";
-  return "—";
-}
-
-function extractExplicitSharesFromSentence(sentenceInput, type) {
-  const sentence = normaliseWhitespace(sentenceInput);
-
-  const patterns =
-    type === "Salg"
-      ? [
-          /(?:has\s+)?(?:sold|disposed|solgt|avhendet)[^.\n]{0,140}?([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
-          /(?:sale|salg)\s+of\s+([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
-        ]
-      : type === "Kjøp"
-        ? [
-            /(?:has\s+)?(?:purchased|acquired|bought|subscribed|kjøpt|ervervet|tegnet)[^.\n]{0,140}?([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
-            /(?:purchase|kjøp|erverv)\s+of\s+([\d\s.,]+)\s+(?:shares|aksjer)\b/i,
-          ]
-        : [];
-
-  for (const pattern of patterns) {
-    const match = sentence.match(pattern);
-    if (!match) continue;
-
-    const value = parseShareNumber(match[1]);
-    if (Number.isFinite(value) && value > 0 && value < 1000000000) return value;
-  }
-
-  return null;
-}
-
-function extractTransactionDetails(messageText, title) {
-  const text = normaliseWhitespace(messageText);
-  const core = text.includes("Share message") ? text.slice(text.indexOf("Share message")) : text;
-
-  if (hasComplexTransactionContext(core, title)) {
-    return {
-      type: "—",
-      shares: null,
-      pricePerShare: null,
-      confidence: "low",
-      note: "Kompleks melding med flere transaksjoner/opsjoner/aksjelån. Verdier vises ikke automatisk for å unngå feil.",
-    };
-  }
-
-  const candidates = [];
-
-  for (const sentence of splitTransactionSentences(core)) {
-    if (!/(shares|aksjer)/i.test(sentence)) continue;
-    if (isHoldingOnlySentence(sentence)) continue;
-
-    const type = explicitTransactionType(sentence);
-    if (type === "—") continue;
-
-    const shares = extractExplicitSharesFromSentence(sentence, type);
-    const pricePerShare = extractPrice(sentence);
-
-    if (shares || pricePerShare) {
-      candidates.push({
-        type,
-        shares,
-        pricePerShare,
-        sentence,
-        score: (shares ? 2 : 0) + (pricePerShare ? 1 : 0),
-      });
-    }
-  }
-
-  if (!candidates.length) {
-    return {
-      type: "—",
-      shares: null,
-      pricePerShare: null,
-      confidence: "none",
-      note: "Fant ikke én tydelig kjøps-/salgstransaksjon i teksten.",
-    };
-  }
-
-  candidates.sort((a, b) => b.score - a.score);
-  const bestScore = candidates[0].score;
-  const best = candidates.filter((candidate) => candidate.score === bestScore);
-
-  if (best.length !== 1) {
-    return {
-      type: "Flere",
-      shares: null,
-      pricePerShare: null,
-      confidence: "low",
-      note: "Flere mulige transaksjoner i samme melding. Åpne meldingen for detaljer.",
-    };
-  }
-
-  return {
-    type: best[0].type,
-    shares: best[0].shares || null,
-    pricePerShare: best[0].shares ? best[0].pricePerShare || null : null,
-    confidence: best[0].shares ? "high" : "medium",
-    note: null,
-  };
-}
-
 function extractIssuerFromMessage(messageText) {
   const text = normaliseWhitespace(messageText);
 
@@ -431,7 +223,7 @@ function messageIdFromUrl(url) {
   return match ? match[1] : null;
 }
 
-async function renderSearchPage(url, maxLinks = 24) {
+async function renderSearchPage(url) {
   const chromium = (await import("@sparticuz/chromium")).default;
   const puppeteer = await import("puppeteer-core");
 
@@ -468,7 +260,7 @@ async function renderSearchPage(url, maxLinks = 24) {
           rowText: closestUsefulText(a),
         }))
         .filter((item) => item.href)
-        .slice(0, Math.max(16, Math.min(60, maxLinks + 8)));
+        .slice(0, 16);
     });
 
     return { browser, page, links };
@@ -490,10 +282,10 @@ async function scrapeMessage(page, link) {
 
   const messageText = normaliseWhitespace(payload.bodyText);
   const title = normaliseWhitespace(link.title || payload.title);
+  const combined = `${title} ${messageText}`;
   const messageId = messageIdFromUrl(link.href);
   const issuerId = extractIssuerFromMessage(messageText) || "—";
   const issuerName = extractIssuerName(messageText) || issuerId;
-  const transaction = extractTransactionDetails(messageText, title);
 
   return {
     messageId,
@@ -502,12 +294,10 @@ async function scrapeMessage(page, link) {
     issuerId,
     issuerName,
     title,
-    type: transaction.type,
-    personRole: extractRole(messageText),
-    shares: transaction.shares,
-    pricePerShare: transaction.pricePerShare,
-    parseConfidence: transaction.confidence,
-    parserNote: transaction.note,
+    type: classifyTradeType(combined),
+    personRole: extractRole(combined),
+    shares: extractShares(combined),
+    pricePerShare: extractPrice(combined),
     rawSnippet: messageText.slice(0, 1200),
     rowText: link.rowText,
   };
@@ -520,10 +310,9 @@ function sortTrades(a, b) {
   return String(b.messageId || b.id || "").localeCompare(String(a.messageId || a.id || ""));
 }
 
-async function scrapeNewswebInsiders(daysBack = 14, limit = 16) {
+async function scrapeNewswebInsiders(daysBack = 14) {
   const url = searchUrl(daysBack);
-  const maxMessages = Math.max(1, Math.min(24, limit));
-  const rendered = await renderSearchPage(url, maxMessages);
+  const rendered = await renderSearchPage(url);
   const { browser, page, links } = rendered;
 
   try {
@@ -540,7 +329,7 @@ async function scrapeNewswebInsiders(daysBack = 14, limit = 16) {
     }
 
     const trades = [];
-    for (const link of uniqueLinks.slice(0, maxMessages)) {
+    for (const link of uniqueLinks.slice(0, 10)) {
       try {
         trades.push(await scrapeMessage(page, link));
       } catch (error) {
@@ -570,11 +359,9 @@ async function scrapeNewswebInsiders(daysBack = 14, limit = 16) {
 
 async function updateInsiderTrades(request, response) {
   const fetchedAt = new Date().toISOString();
-  const daysBack = clampNumber(getQueryValue(request, "days"), 14, 7, 30);
-  const limit = clampNumber(getQueryValue(request, "limit"), 16, 1, 24);
 
   try {
-    const { searchUrl: url, trades } = await scrapeNewswebInsiders(daysBack, limit);
+    const { searchUrl: url, trades } = await scrapeNewswebInsiders(14);
     const saved = [];
 
     for (const trade of trades) {
@@ -594,7 +381,7 @@ async function updateInsiderTrades(request, response) {
       saved.push(row);
     }
 
-    response.status(200).json({ status: "ok", metricKey: METRIC_KEY, fetchedAt, searchUrl: url, daysBack, limit, savedCount: saved.length, saved });
+    response.status(200).json({ status: "ok", metricKey: METRIC_KEY, fetchedAt, searchUrl: url, savedCount: saved.length, saved });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ukjent feil ved henting av innsidehandler.";
 
@@ -603,7 +390,7 @@ async function updateInsiderTrades(request, response) {
       value: null,
       unit: null,
       source_name: "Oslo Børs NewsWeb",
-      source_url: searchUrl(daysBack),
+      source_url: searchUrl(14),
       source_document: "NewsWeb search category 1102",
       observed_date: null,
       fetched_at: fetchedAt,
@@ -700,12 +487,10 @@ async function readInsiderTrades(request, response) {
   if (error) throw error;
 
   const trades = uniqueTrades(data);
-  const weekDays = clampNumber(getQueryValue(request, "weekDays"), 7, 1, 30);
-  const latestLimit = clampNumber(getQueryValue(request, "latestLimit"), 10, 5, 30);
-  const weekCutoff = new Date();
-  weekCutoff.setDate(weekCutoff.getDate() - weekDays);
-  const weekCutoffIso = weekCutoff.toISOString().slice(0, 10);
-  const week = trades.filter((trade) => trade.date && trade.date >= weekCutoffIso);
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const sevenDaysAgoIso = sevenDaysAgo.toISOString().slice(0, 10);
+  const week = trades.filter((trade) => trade.date && trade.date >= sevenDaysAgoIso);
 
   response.setHeader("Cache-Control", "no-store, max-age=0");
   response.status(200).json({
@@ -713,13 +498,8 @@ async function readInsiderTrades(request, response) {
     sourceName: "Oslo Børs NewsWeb",
     sourceUrl: searchUrl(7),
     fetchedAt: new Date().toISOString(),
-    latest: trades.slice(0, latestLimit),
+    latest: trades.slice(0, 10),
     week,
-    meta: {
-      weekDays,
-      latestLimit,
-      note: "Listen viser lagrede meldinger hentet av appen. NewsWeb kan ha flere meldinger enn dette hvis update-limit er lavere enn antall meldinger.",
-    },
   });
 }
 

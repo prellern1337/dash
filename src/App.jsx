@@ -214,11 +214,6 @@ function formatPrice(value) {
   return new Intl.NumberFormat("no-NO", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(value));
 }
 
-function openNewswebMessage(url) {
-  if (!url) return;
-  window.open(url, "_blank", "noopener,noreferrer");
-}
-
 function displayCompany(trade) {
   const issuerId = trade?.issuerId;
   const issuerName = trade?.issuerName;
@@ -444,7 +439,7 @@ function FxOverlay({ pair, onClose }) {
   );
 }
 
-function InsiderTradesTable({ trades, compact = false, showLinks = false }) {
+function InsiderTradesTable({ trades, compact = false }) {
   const visible = trades || [];
 
   if (!visible.length) {
@@ -465,40 +460,18 @@ function InsiderTradesTable({ trades, compact = false, showLinks = false }) {
             <th className="w-[13%] px-1 py-2 font-semibold">Type</th>
             <th className="w-[25%] px-1 py-2 font-semibold">Stilling</th>
             <th className="w-[17%] px-1 py-2 text-right font-semibold">Aksjer</th>
-            <th className="w-[15%] px-2 py-2 text-right font-semibold">Pris</th>
-            {showLinks && <th className="w-[11%] px-2 py-2 text-right font-semibold">Melding</th>}
+            <th className="w-[17%] px-2 py-2 text-right font-semibold">Pris</th>
           </tr>
         </thead>
         <tbody>
           {visible.map((trade) => (
-            <tr key={trade.id || trade.messageId || trade.messageUrl} className={showLinks ? "border-t border-stone-100 hover:bg-stone-50" : "border-t border-stone-100"}>
+            <tr key={trade.id || trade.messageId || trade.messageUrl} className="border-t border-stone-100">
               <td className="px-2 py-1.5 text-[10px] tabular-nums text-stone-500">{formatShortDate(trade.date)}</td>
               <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">{displayCompany(trade)}</td>
               <td className="px-1 py-1.5"><TypeBadge type={trade.type} /></td>
               <td className="truncate px-1 py-1.5 text-[10px] text-stone-500">{trade.personRole || "—"}</td>
               <td className="px-1 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatShares(trade.shares)}</td>
               <td className="px-2 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatPrice(trade.pricePerShare)}</td>
-              {showLinks && (
-                <td className="px-2 py-1.5 text-right">
-                  {trade.messageUrl ? (
-                    <button
-                      type="button"
-                      className="inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-1 text-[10px] font-semibold text-stone-600 hover:bg-stone-200 hover:text-stone-900"
-                      aria-label="Åpne NewsWeb-melding"
-                      onClick={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        openNewswebMessage(trade.messageUrl);
-                      }}
-                    >
-                      Åpne
-                      <ExternalLink size={11} />
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-stone-300">—</span>
-                  )}
-                </td>
-              )}
             </tr>
           ))}
         </tbody>
@@ -526,13 +499,13 @@ function InsiderTradesOverlay({ onClose, insiderState }) {
     >
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {insiderState.status === "ok"
-          ? `Viser ${insiderState.week.length} lagrede meldinger fra siste 7 dager. NewsWeb kan ha flere meldinger enn dette hvis de ikke er hentet inn ennå.`
+          ? `Siste uke: ${insiderState.week.length} meldinger.`
           : insiderState.status === "loading"
             ? "Leser innsidehandler fra Supabase..."
             : insiderState.message || "Ingen innsidehandler lagret ennå. Kjør /api/insider-trades?action=update."}
       </div>
       <div className="max-h-[52vh] overflow-y-auto pr-1">
-        <InsiderTradesTable trades={insiderState.week} showLinks />
+        <InsiderTradesTable trades={insiderState.week} />
       </div>
     </Overlay>
   );
@@ -631,7 +604,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadInsiderTrades() {
       try {
-        const response = await fetch(`/api/insider-trades?latestLimit=30&weekDays=7&ts=${Date.now()}`, { cache: "no-store" });
+        const response = await fetch(`/api/insider-trades?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -647,7 +620,6 @@ export default function MarketDashboardPrototype() {
             message: payload.message || null,
             latest: payload.latest || [],
             week: payload.week || [],
-            meta: payload.meta || null,
           });
         }
       } catch (error) {

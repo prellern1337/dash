@@ -25,7 +25,7 @@ async function fetchRows() {
     .select("*")
     .in("metric_key", keys)
     .order("fetched_at", { ascending: false })
-    .limit(120);
+    .limit(2500);
 
   if (error) throw error;
   return data || [];
@@ -35,11 +35,56 @@ function latestByKey(rows, key, status = null) {
   return rows.find((row) => row.metric_key === key && (!status || row.status === status)) || null;
 }
 
+function dateKey(value) {
+  if (!value) return null;
+  return String(value).slice(0, 10);
+}
+
+function buildDailySeries(rows, key, days = 60) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffIso = cutoff.toISOString().slice(0, 10);
+
+  const relevant = (rows || [])
+    .filter((row) => row.metric_key === key && row.status === "ok" && Number.isFinite(Number(row.value)))
+    .map((row) => ({
+      date: dateKey(row.observed_date || row.fetched_at),
+      fetchedAt: row.fetched_at,
+      value: Number(row.value),
+    }))
+    .filter((row) => row.date && row.date >= cutoffIso)
+    .sort((a, b) => new Date(a.fetchedAt).getTime() - new Date(b.fetchedAt).getTime());
+
+  // Last successful run per day.
+  const byDate = new Map();
+  for (const row of relevant) byDate.set(row.date, row.value);
+
+  return Array.from(byDate.entries())
+    .map(([date, value]) => ({ date, value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function buildHistory(rows) {
+  return {
+    NOK: {
+      "3 Yr": buildDailySeries(rows, "swap_nok_3y"),
+      "5 Yr": buildDailySeries(rows, "swap_nok_5y"),
+      "10 Yr": buildDailySeries(rows, "swap_nok_10y"),
+    },
+    SEK: {
+      "3 Yr": buildDailySeries(rows, "swap_sek_3y"),
+      "5 Yr": buildDailySeries(rows, "swap_sek_5y"),
+      "10 Yr": buildDailySeries(rows, "swap_sek_10y"),
+    },
+  };
+}
+
 export default async function handler(request, response) {
   try {
     const rows = await fetchRows();
     const data = emptyData();
     const latest = {};
+    const history = buildHistory(rows);
     const missing = [];
     const staleOrError = [];
 
@@ -87,6 +132,7 @@ export default async function handler(request, response) {
       sourceUrl: "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates",
       fetchedAt: new Date().toISOString(),
       data,
+      history,
       missing,
       staleOrError,
     });

@@ -1,34 +1,23 @@
-# Market Dashboard — PWA standalone fix
+# Market Dashboard — SWAP history overlay
 
-Denne pakken bygger videre på `stibor-latest-insider-cleanup` og legger til PWA/standalone-oppsett.
+Denne pakken bygger videre på PWA/standalone-versjonen og legger til historikkvisning for SEB SWAP-tilene.
 
 ## Endringer
 
-- `public/manifest.webmanifest`
-  - `display: standalone`
-  - `start_url: /?source=pwa`
-  - appnavn: Dashboard / Market Dashboard
-- iOS-meta i `index.html`
-  - `apple-mobile-web-app-capable=yes`
-  - `apple-mobile-web-app-title=Dashboard`
-  - `apple-touch-icon`
-- `public/service-worker.js`
-  - lett service worker for installasjon på Android/Chrome
-  - network-first/no-cache for å unngå stale dashboard
-- `src/main.jsx`
-  - registrerer service worker
+- `/api/swaps` returnerer nå også `history`.
+- Historikk bygges fra `market_metrics` i Supabase.
+- Viser siste lagrede verdi per dag, inntil siste 60 dager.
+- Norge/Sverige SWAP-tilene er klikkbare.
+- Overlay viser:
+  - dagens 3Y / 5Y / 10Y
+  - historisk linjegraf for 3Y / 5Y / 10Y
+  - lenke til SEB-kilden
 
-## Bruk etter deploy
+## Test
 
-### iPhone
-1. Åpne dashboardet i Safari.
-2. Trykk Del-knappen.
-3. Velg "Legg til på Hjem-skjerm".
-4. Åpne dashboardet fra hjemskjerm-ikonet.
+1. Deploy pakken.
+2. Sjekk `/api/swaps` og bekreft at `history` finnes.
+3. Refresh dashboardet.
+4. Trykk på Norge- eller Sverige-SWAP-tilen.
 
-### Android
-1. Åpne dashboardet i Chrome.
-2. Meny → Installer app / Legg til på startsiden.
-3. Åpne dashboardet fra ikonet.
-
-Når appen åpnes fra ikonet, skal den vises uten vanlig adressefelt.
+Hvis grafen har få punkter, er det bare fordi historikk må bygges opp over flere `update-swaps`-kjøringer.

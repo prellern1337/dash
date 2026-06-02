@@ -128,6 +128,10 @@ const fallbackSwaps = {
       },
     },
   },
+  history: {
+    NOK: { "3 Yr": [], "5 Yr": [], "10 Yr": [] },
+    SEK: { "3 Yr": [], "5 Yr": [], "10 Yr": [] },
+  },
 };
 
 const fallbackYieldState = {
@@ -439,6 +443,110 @@ function FxOverlay({ pair, onClose }) {
   );
 }
 
+
+function mergeSwapHistory(historyForCurrency) {
+  const byDate = new Map();
+  for (const tenor of ["3 Yr", "5 Yr", "10 Yr"]) {
+    for (const point of historyForCurrency?.[tenor] || []) {
+      if (!byDate.has(point.date)) byDate.set(point.date, { date: point.date });
+      byDate.get(point.date)[tenor] = point.value;
+    }
+  }
+
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function SwapOverlay({ currency, swapsState, onClose }) {
+  const history = swapsState.history?.[currency] || {};
+  const data = mergeSwapHistory(history);
+  const current = swapsState.data?.[currency]?.rates || {};
+  const values = data
+    .flatMap((row) => ["3 Yr", "5 Yr", "10 Yr"].map((tenor) => row[tenor]))
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number);
+
+  const latestValues = Object.values(current)
+    .filter((value) => Number.isFinite(Number(value)))
+    .map(Number);
+
+  const allValues = values.length ? values : latestValues;
+  const min = allValues.length ? Math.min(...allValues) : 0;
+  const max = allValues.length ? Math.max(...allValues) : 1;
+  const padding = Math.max((max - min) * 0.18, 0.08);
+
+  return (
+    <Overlay
+      title={`${currency} swap`}
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={swapsState.sourceUrl || "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne kilde hos SEB
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="mb-4 grid grid-cols-3 gap-2">
+        {["3 Yr", "5 Yr", "10 Yr"].map((tenor) => (
+          <div key={tenor} className="rounded-2xl bg-stone-50 p-3">
+            <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-stone-400">{tenor.replace(" Yr", "Y")}</div>
+            <div className="mt-1 text-lg font-semibold tracking-[-0.04em] text-stone-950">{formatOptionalPercent(current[tenor])}</div>
+          </div>
+        ))}
+      </div>
+
+      {data.length ? (
+        <div className="h-64 rounded-3xl bg-stone-50 p-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 14, left: 6, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(120,113,108,0.18)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#78716c" }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+                interval="preserveStartEnd"
+                tickFormatter={formatChartDate}
+              />
+              <YAxis
+                domain={[min - padding, max + padding]}
+                tick={{ fontSize: 10, fill: "#57534e" }}
+                tickLine={false}
+                axisLine={false}
+                width={58}
+                tickMargin={8}
+                tickFormatter={(value) => formatNumber(value, 2)}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 16, border: "0", boxShadow: "0 14px 40px rgba(0,0,0,0.12)" }}
+                formatter={(value, name) => [`${formatNumber(value, 2)} %`, name]}
+                labelFormatter={(value) => `Dato: ${value}`}
+              />
+              <Line type="monotone" dataKey="3 Yr" name="3Y" stroke="#44403c" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="5 Yr" name="5Y" stroke="#78716c" strokeWidth={3} dot={false} />
+              <Line type="monotone" dataKey="10 Yr" name="10Y" stroke="#a8a29e" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-stone-50 p-4 text-sm text-stone-500">
+          Ingen historikk lagret ennå. Historikken bygges opp etter hvert som <span className="font-medium text-stone-700">update-swaps</span> kjører.
+        </div>
+      )}
+
+      <div className="mt-3 text-[11px] text-stone-400">
+        Viser siste lagrede verdi per dag, inntil siste 60 dager.
+      </div>
+    </Overlay>
+  );
+}
+
+
 function InsiderTradesTable({ trades, compact = false }) {
   const visible = trades || [];
 
@@ -582,6 +690,7 @@ function YieldOverlay({ onClose, yieldState }) {
 
 export default function MarketDashboardPrototype() {
   const [selectedFx, setSelectedFx] = useState(null);
+  const [selectedSwap, setSelectedSwap] = useState(null);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
@@ -650,6 +759,7 @@ export default function MarketDashboardPrototype() {
             fetchedAt: payload.fetchedAt,
             message: payload.errors?.length ? payload.errors.join(" | ") : null,
             data: payload.data || fallbackSwaps.data,
+            history: payload.history || fallbackSwaps.history,
           });
         }
       } catch (error) {
@@ -1009,7 +1119,7 @@ export default function MarketDashboardPrototype() {
         </section>
 
         <main className="grid grid-cols-2 gap-3">
-          <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large">
+          <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
             <RateStack
               rows={[
                 { label: "3Y swap", value: formatOptionalPercent(swapsState.data.NOK.rates["3 Yr"]) },
@@ -1019,7 +1129,7 @@ export default function MarketDashboardPrototype() {
             />
           </Tile>
 
-          <Tile title="Sverige" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large">
+          <Tile title="Sverige" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("SEK")}>
             <RateStack
               rows={[
                 { label: "3Y swap", value: formatOptionalPercent(swapsState.data.SEK.rates["3 Yr"]) },
@@ -1123,6 +1233,7 @@ export default function MarketDashboardPrototype() {
       </div>
 
       {selectedFx && <FxOverlay pair={selectedFx} onClose={() => setSelectedFx(null)} />}
+      {selectedSwap && <SwapOverlay currency={selectedSwap} swapsState={swapsState} onClose={() => setSelectedSwap(null)} />}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>

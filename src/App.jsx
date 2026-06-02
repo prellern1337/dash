@@ -201,6 +201,59 @@ function formatChartDate(value) {
   }).format(date);
 }
 
+function formatSwapChartDate(value, data = []) {
+  if (!value) return "";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const dates = (data || [])
+    .map((point) => new Date(`${point.date}T12:00:00`))
+    .filter((pointDate) => !Number.isNaN(pointDate.getTime()));
+
+  if (!dates.length) {
+    return new Intl.DateTimeFormat("no-NO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    }).format(date);
+  }
+
+  const min = Math.min(...dates.map((pointDate) => pointDate.getTime()));
+  const max = Math.max(...dates.map((pointDate) => pointDate.getTime()));
+  const spanDays = Math.round((max - min) / (1000 * 60 * 60 * 24));
+
+  if (spanDays <= 90) {
+    return new Intl.DateTimeFormat("no-NO", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+    }).format(date);
+  }
+
+  if (spanDays <= 730) {
+    return new Intl.DateTimeFormat("no-NO", {
+      month: "2-digit",
+      year: "2-digit",
+    }).format(date);
+  }
+
+  return new Intl.DateTimeFormat("no-NO", {
+    year: "numeric",
+  }).format(date);
+}
+
+function formatTooltipDate(value) {
+  if (!value) return "—";
+  const date = new Date(`${value}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat("no-NO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  }).format(date);
+}
+
 function formatShortDate(value) {
   if (!value) return "—";
   const date = new Date(`${value}T12:00:00`);
@@ -511,7 +564,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
                 axisLine={false}
                 minTickGap={28}
                 interval="preserveStartEnd"
-                tickFormatter={formatChartDate}
+                tickFormatter={(value) => formatSwapChartDate(value, data)}
               />
               <YAxis
                 domain={[min - padding, max + padding]}
@@ -525,7 +578,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
               <Tooltip
                 contentStyle={{ borderRadius: 16, border: "0", boxShadow: "0 14px 40px rgba(0,0,0,0.12)" }}
                 formatter={(value, name) => [`${formatNumber(value, 2)} %`, name]}
-                labelFormatter={(value) => `Dato: ${value}`}
+                labelFormatter={(value) => `Dato: ${formatTooltipDate(value)}`}
               />
               <Line type="monotone" dataKey="3 Yr" name="3Y" stroke="#44403c" strokeWidth={3} dot={false} />
               <Line type="monotone" dataKey="5 Yr" name="5Y" stroke="#78716c" strokeWidth={3} dot={false} />

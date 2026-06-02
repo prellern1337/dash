@@ -1,23 +1,20 @@
-# Market Dashboard — SWAP history overlay
+# Market Dashboard — SWAP axis date format
 
-Denne pakken bygger videre på PWA/standalone-versjonen og legger til historikkvisning for SEB SWAP-tilene.
+Denne pakken bygger videre på SWAP history overlay.
 
-## Endringer
+## Endring
 
-- `/api/swaps` returnerer nå også `history`.
-- Historikk bygges fra `market_metrics` i Supabase.
-- Viser siste lagrede verdi per dag, inntil siste 60 dager.
-- Norge/Sverige SWAP-tilene er klikkbare.
-- Overlay viser:
-  - dagens 3Y / 5Y / 10Y
-  - historisk linjegraf for 3Y / 5Y / 10Y
-  - lenke til SEB-kilden
+X-aksen i SWAP-grafene bruker nå dynamisk datoformat:
+
+- Kort historikk, inntil 90 dager: `dd.mm.åå`
+- Mellomlang historikk, inntil 2 år: `mm.åå`
+- Lang historikk: `åååå`
+
+Tooltip-datoen vises også som `dd.mm.åå`.
 
 ## Test
 
 1. Deploy pakken.
-2. Sjekk `/api/swaps` og bekreft at `history` finnes.
-3. Refresh dashboardet.
-4. Trykk på Norge- eller Sverige-SWAP-tilen.
-
-Hvis grafen har få punkter, er det bare fordi historikk må bygges opp over flere `update-swaps`-kjøringer.
+2. Refresh dashboardet.
+3. Trykk på Norge- eller Sverige-SWAP-tilen.
+4. X-aksen skal vise f.eks. `21.05.26` så lenge historikken er kort.

@@ -1,35 +1,27 @@
-# Market Dashboard — API consolidation step 1
+# Market Dashboard — NIBOR/STIBOR history overlay
 
-Denne pakken konsoliderer API-ene for SWAP og YIELD slik at vi frigjør plass under Vercel Hobby-grensen.
+Denne pakken bygger videre på API-konsolidering steg 1 og legger til historikkvisning for NIBOR/STIBOR.
 
 ## Endringer
 
-### SWAP
-Før:
-- `/api/swaps`
-- `/api/update-swaps`
+- `/api/nibor` returnerer nå `history`.
+- `/api/stibor` returnerer nå `history`.
+- Historikk bygges fra `market_metrics` i Supabase.
+- Viser siste lagrede verdi per dag, inntil siste 180 dager.
+- 3M NIBOR- og 3M STIBOR-tilene er klikkbare.
+- Overlay viser:
+  - siste verdi
+  - hentet-tidspunkt
+  - antall dagspunkter
+  - historisk linjegraf
+- Bruker samme dynamiske X-akseformat som SWAP:
+  - kort historikk: `dd.mm.åå`
+  - mellomlang: `mm.åå`
+  - lang: `åååå`
 
-Nå:
-- `/api/swaps`
-- `/api/swaps?action=update`
+## API-struktur
 
-`api/update-swaps.js` er flyttet til `lib/update-swaps.js`, så den teller ikke lenger som en Vercel Serverless Function.
-
-### YIELD
-Før:
-- `/api/yields`
-- `/api/update-yields`
-
-Nå:
-- `/api/yields`
-- `/api/yields?action=update`
-
-`api/update-yields.js` er flyttet til `lib/update-yields.js`, så den teller ikke lenger som en Vercel Serverless Function.
-
-## API-filer etter rydding
-
-Det skal nå være 9 filer i `/api`:
-
+Fortsatt 9 filer i `/api`:
 - `fx.js`
 - `insider-trades.js`
 - `nibor.js`
@@ -40,20 +32,9 @@ Det skal nå være 9 filer i `/api`:
 - `update-stibor.js`
 - `yields.js`
 
-Dette gir plass til en fremtidig `indices.js`.
-
-## Viktig
-
-GitHub Actions er oppdatert:
-- `update-swaps.yml` kaller nå `/api/swaps?action=update`
-- `update-yields.yml` kaller nå `/api/yields?action=update`
-
 ## Test etter deploy
 
-1. `/api/swaps`
-2. `/api/swaps?action=update`
-3. `/api/yields`
-4. `/api/yields?action=update`
-5. Kjør GitHub Actions manuelt:
-   - Update SEB swaps
-   - Update prime yields
+1. `/api/nibor` → skal inneholde `history`.
+2. `/api/stibor` → skal inneholde `history`.
+3. Refresh dashboardet.
+4. Trykk på 3M NIBOR og 3M STIBOR.

@@ -600,6 +600,91 @@ function SwapOverlay({ currency, swapsState, onClose }) {
 }
 
 
+
+function RateHistoryOverlay({ rate, onClose }) {
+  const data = rate.history || [];
+  const values = data.map((point) => Number(point.value)).filter((value) => Number.isFinite(value));
+  const min = values.length ? Math.min(...values) : Number(rate.value) || 0;
+  const max = values.length ? Math.max(...values) : Number(rate.value) || 1;
+  const padding = Math.max((max - min) * 0.18, 0.08);
+
+  return (
+    <Overlay
+      title={rate.title}
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={rate.sourceUrl || "#"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne kilde
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Siste verdi</div>
+          <div className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-stone-950">
+            {hasNumericValue(rate.value) ? `${formatNumber(rate.value, 2)} %` : "—"}
+          </div>
+          <div className="mt-1 text-[11px] text-stone-400">Hentet: {formatDateTimeShort(rate.fetchedAt)}</div>
+        </div>
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Historikk</div>
+          <div className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-stone-950">{data.length}</div>
+          <div className="mt-1 text-[11px] text-stone-400">dagspunkter</div>
+        </div>
+      </div>
+
+      {data.length >= 2 ? (
+        <div className="h-64 rounded-3xl bg-stone-50 p-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 14, left: 6, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(120,113,108,0.18)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#78716c" }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+                interval="preserveStartEnd"
+                tickFormatter={(value) => formatSwapChartDate(value, data)}
+              />
+              <YAxis
+                domain={[min - padding, max + padding]}
+                tick={{ fontSize: 10, fill: "#57534e" }}
+                tickLine={false}
+                axisLine={false}
+                width={58}
+                tickMargin={8}
+                tickFormatter={(value) => formatNumber(value, 2)}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 16, border: "0", boxShadow: "0 14px 40px rgba(0,0,0,0.12)" }}
+                formatter={(value) => [`${formatNumber(value, 2)} %`, rate.title]}
+                labelFormatter={(value) => `Dato: ${formatTooltipDate(value)}`}
+              />
+              <Line type="monotone" dataKey="value" stroke="#44403c" strokeWidth={3} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-stone-50 p-4 text-sm text-stone-500">
+          For lite historikk til graf ennå. Grafen vises når det finnes minst to dagspunkter.
+        </div>
+      )}
+
+      <div className="mt-3 text-[11px] text-stone-400">
+        Viser siste lagrede verdi per dag, inntil siste 180 dager.
+      </div>
+    </Overlay>
+  );
+}
+
+
 function InsiderTradesTable({ trades, compact = false }) {
   const visible = trades || [];
 
@@ -744,6 +829,7 @@ function YieldOverlay({ onClose, yieldState }) {
 export default function MarketDashboardPrototype() {
   const [selectedFx, setSelectedFx] = useState(null);
   const [selectedSwap, setSelectedSwap] = useState(null);
+  const [selectedRate, setSelectedRate] = useState(null);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
@@ -1210,6 +1296,7 @@ export default function MarketDashboardPrototype() {
             }
             accent="amber"
             icon={<CircleDollarSign size={17} />}
+            onClick={() => setSelectedRate({ ...niborState, title: "3M NIBOR" })}
           />
 
           <Tile
@@ -1230,6 +1317,7 @@ export default function MarketDashboardPrototype() {
             }
             accent="cyan"
             icon={<CircleDollarSign size={17} />}
+            onClick={() => setSelectedRate({ ...stiborState, title: "3M STIBOR" })}
           />
 
           {fxState.pairs.map((pair, index) => (
@@ -1287,6 +1375,7 @@ export default function MarketDashboardPrototype() {
 
       {selectedFx && <FxOverlay pair={selectedFx} onClose={() => setSelectedFx(null)} />}
       {selectedSwap && <SwapOverlay currency={selectedSwap} swapsState={swapsState} onClose={() => setSelectedSwap(null)} />}
+      {selectedRate && <RateHistoryOverlay rate={selectedRate} onClose={() => setSelectedRate(null)} />}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>

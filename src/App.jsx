@@ -196,6 +196,32 @@ function changeTone(value) {
   return Number(value) >= 0 ? "text-emerald-600" : "text-rose-600";
 }
 
+function isInverseRiskIndex(index) {
+  return index?.id === "vix";
+}
+
+function indexChangeTone(index, value) {
+  if (!Number.isFinite(Number(value))) return "text-stone-400";
+
+  // For VIX, higher means more expected volatility/market stress.
+  if (isInverseRiskIndex(index)) {
+    return Number(value) <= 0 ? "text-emerald-600" : "text-rose-600";
+  }
+
+  return changeTone(value);
+}
+
+function indexAccent(index) {
+  if (!Number.isFinite(Number(index?.change1d))) return "slate";
+
+  // For VIX, negative is calmer/positive for risk sentiment.
+  if (isInverseRiskIndex(index)) {
+    return Number(index.change1d) <= 0 ? "emerald" : "rose";
+  }
+
+  return Number(index.change1d) >= 0 ? "emerald" : "rose";
+}
+
 const formatNumber = (value, decimals = 2) => Number(value).toFixed(decimals).replace(".", ",");
 
 function hasNumericValue(value) {
@@ -715,7 +741,7 @@ function RateHistoryOverlay({ rate, onClose }) {
 
 
 
-function IndexMiniChart({ data = [], change }) {
+function IndexMiniChart({ data = [], change, index }) {
   const values = data.map((point) => Number(point.value)).filter((value) => Number.isFinite(value));
   const min = values.length ? Math.min(...values) : 0;
   const max = values.length ? Math.max(...values) : 1;
@@ -726,7 +752,7 @@ function IndexMiniChart({ data = [], change }) {
   }
 
   return (
-    <div className={`mt-2 h-14 ${changeTone(change)}`}>
+    <div className={`mt-2 h-14 ${indexChangeTone(index, change)}`}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 6, right: 2, left: 2, bottom: 2 }}>
           <YAxis hide domain={[min - padding, max + padding]} />
@@ -742,7 +768,7 @@ function IndexTile({ index, onClick }) {
     <Tile
       title={index.name}
       source={index.sourceName || "Index"}
-      accent={Number(index.change1d) >= 0 ? "emerald" : "rose"}
+      accent={indexAccent(index)}
       icon={<LineChartIcon size={17} />}
       onClick={onClick}
       size="standard"
@@ -752,11 +778,11 @@ function IndexTile({ index, onClick }) {
           <div className="text-2xl font-semibold tracking-[-0.05em] text-stone-950">{formatIndexValue(index.value)}</div>
           <div className="mt-1 text-[11px] text-stone-400">{index.date || "—"}</div>
         </div>
-        <div className={`rounded-full bg-stone-50 px-2 py-1 text-[11px] font-semibold tabular-nums ${changeTone(index.change1d)}`}>
+        <div className={`rounded-full bg-stone-50 px-2 py-1 text-[11px] font-semibold tabular-nums ${indexChangeTone(index, index.change1d)}`}>
           {formatSignedPercent(index.change1d)}
         </div>
       </div>
-      <IndexMiniChart data={index.sparkline || index.history || []} change={index.change1d} />
+      <IndexMiniChart data={index.sparkline || index.history || []} change={index.change1d} index={index} />
       <div className="mt-2 flex justify-between text-[10px] text-stone-400">
         <span>1M {formatSignedPercent(index.change1m)}</span>
         <span>YTD {formatSignedPercent(index.ytd)}</span>
@@ -797,7 +823,7 @@ function IndexOverlay({ index, onClose }) {
         </div>
         <div className="rounded-2xl bg-stone-50 p-3">
           <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Siste dag</div>
-          <div className={`mt-1 text-2xl font-semibold tracking-[-0.04em] ${changeTone(index.change1d)}`}>{formatSignedPercent(index.change1d)}</div>
+          <div className={`mt-1 text-2xl font-semibold tracking-[-0.04em] ${indexChangeTone(index, index.change1d)}`}>{formatSignedPercent(index.change1d)}</div>
           <div className="mt-1 text-[11px] text-stone-400">1M {formatSignedPercent(index.change1m)} · YTD {formatSignedPercent(index.ytd)}</div>
         </div>
       </div>
@@ -919,6 +945,7 @@ function InsiderTradesOverlay({ onClose, insiderState }) {
 
 function YieldOverlay({ onClose, yieldState }) {
   const rows = yieldState.rows || fallbackYieldState.rows;
+  const getRowSourceUrl = (row) => row.office?.sourceUrl || row.retail?.sourceUrl || row.logistics?.sourceUrl;
 
   return (
     <Overlay
@@ -959,7 +986,20 @@ function YieldOverlay({ onClose, yieldState }) {
             {rows.map((row) => (
               <tr key={row.source} className="border-t border-stone-100">
                 <td className="px-3 py-3">
-                  <div className="font-medium text-stone-800">{row.source}</div>
+                  {getRowSourceUrl(row) ? (
+                    <a
+                      href={getRowSourceUrl(row)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-medium text-stone-800 underline decoration-stone-300 underline-offset-4 active:scale-[0.98]"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {row.source}
+                      <ExternalLink size={12} />
+                    </a>
+                  ) : (
+                    <div className="font-medium text-stone-800">{row.source}</div>
+                  )}
                   <div className="mt-0.5 text-[10px] text-stone-400">
                     {[row.office?.status, row.retail?.status, row.logistics?.status].includes("stale")
                       ? "Delvis gammel"

@@ -1,25 +1,26 @@
-# Market Dashboard — index descriptions + SWAP title fix
+# Market Dashboard — VIX text + yield source links
 
-Denne pakken bygger videre på index-descriptions-overlay.
+Denne pakken bygger videre på VIX visual fix.
 
 ## Endringer
 
-### Indeks-overlay
-Indeks-overlayen viser nå en kort forklaring under indeksnavnet, i stedet for generisk "Detaljvisning".
+### VIX-forklaring
+VIX-forklaringen er oppdatert til:
 
-Eksempler:
-- OSEBX: Oslo Børs: Vektet utvikling i de største og mest handlede aksjene.
-- S&P 500: USA: Bred indeks med 500 store børsnoterte selskaper.
-- VIX: USA: Markedets forventede volatilitet i S&P 500 neste 30 dager.
+`USA: Forventet 30-dagers volatilitet i S&P 500, lavere er bedre. (<15 lav uro, 20–30 tydelig usikkerhet, >40 krisetilstand).`
 
-### SWAP-tiles
-De to øverste SWAP-tilene har fått nye overskrifter:
+### Yield-overlay
+I Prime yield-overlayen er kildenavnene nå klikkbare:
 
-- `Norge` → `SWAP NOK`
-- `Sverige` → `SWAP SEK`
+- UNION
+- Newsec
+- Akershus
+
+Lenkene bruker eksisterende `sourceUrl` fra `/api/yields`.
 
 ## Test etter deploy
 
-1. Refresh dashboardet med `?v=index-descriptions-swap-title`.
-2. Sjekk at øverste tiles heter `SWAP NOK` og `SWAP SEK`.
-3. Trykk på en indeks-tile og sjekk at forklaringsteksten vises under indeksnavnet.
+1. Refresh dashboardet med `?v=vix-yield-links`.
+2. Trykk på VIX og sjekk ny tekst.
+3. Trykk på Prime yield.
+4. Trykk på UNION/Newsec/Akershus-navnene og sjekk at kildesidene åpnes i ny fane.

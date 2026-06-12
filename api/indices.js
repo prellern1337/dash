@@ -90,7 +90,7 @@ const INDICES = [
     metricKey: "index_vix",
     name: "VIX",
     longName: "CBOE Volatility Index",
-    description: "USA: Markedets forventede volatilitet i S&P 500 neste 30 dager.",
+    description: "USA: Forventet 30-dagers volatilitet i S&P 500, lavere er bedre. (<15 lav uro, 20–30 tydelig usikkerhet, >40 krisetilstand).",
     provider: "stooq",
     symbol: "^vix",
     yahooSymbol: "^VIX",

@@ -418,7 +418,7 @@ function FxChange({ change }) {
   );
 }
 
-function Overlay({ title, children, onClose, footer }) {
+function Overlay({ title, subtitle = "Detaljvisning", children, onClose, footer }) {
   return (
     <AnimatePresence>
       <motion.div
@@ -436,7 +436,7 @@ function Overlay({ title, children, onClose, footer }) {
           <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
             <div>
               <div className="text-sm font-semibold text-stone-950">{title}</div>
-              <div className="mt-0.5 text-xs text-stone-400">Detaljvisning</div>
+              <div className="mt-0.5 text-xs leading-snug text-stone-400">{subtitle}</div>
             </div>
             <button
               type="button"
@@ -775,6 +775,7 @@ function IndexOverlay({ index, onClose }) {
   return (
     <Overlay
       title={index.name}
+      subtitle={index.description || index.longName || "Markedsindeks"}
       onClose={onClose}
       footer={
         <a
@@ -1459,7 +1460,7 @@ export default function MarketDashboardPrototype() {
         </section>
 
         <main className="grid grid-cols-2 gap-3">
-          <Tile title="Norge" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
+          <Tile title="SWAP NOK" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
             <RateStack
               rows={[
                 { label: "3Y swap", value: formatOptionalPercent(swapsState.data.NOK.rates["3 Yr"]) },
@@ -1469,7 +1470,7 @@ export default function MarketDashboardPrototype() {
             />
           </Tile>
 
-          <Tile title="Sverige" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("SEK")}>
+          <Tile title="SWAP SEK" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("SEK")}>
             <RateStack
               rows={[
                 { label: "3Y swap", value: formatOptionalPercent(swapsState.data.SEK.rates["3 Yr"]) },

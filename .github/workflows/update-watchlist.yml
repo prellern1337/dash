@@ -1,0 +1,22 @@
+name: Update watchlist prices
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs Monday-Friday after Oslo/US market close.
+    # Approx. 00:20 Norway summer time / 23:20 winter time.
+    - cron: '20 22 * * 1-5'
+
+jobs:
+  update-watchlist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Vercel watchlist update
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          curl -fsS \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            "https://dash-martin-mogstad-s-projects.vercel.app/api/watchlist?action=update"

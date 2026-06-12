@@ -792,7 +792,7 @@ function WatchlistTile({ watchlistState, onClick }) {
               <tr key={asset.id} className="border-t border-stone-100">
                 <td className="px-2 py-1.5 font-medium text-stone-800">
                   <a
-                    href={asset.sourceUrl || "#"}
+                    href={asset.linkUrl || asset.sourceUrl || "#"}
                     target="_blank"
                     rel="noreferrer"
                     className="underline decoration-stone-300 underline-offset-4"
@@ -856,7 +856,7 @@ function WatchlistOverlay({ watchlistState, onClose }) {
               <tr key={asset.id} className="border-t border-stone-100">
                 <td className="px-3 py-3">
                   <a
-                    href={asset.sourceUrl || "#"}
+                    href={asset.linkUrl || asset.sourceUrl || "#"}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1 font-medium text-stone-800 underline decoration-stone-300 underline-offset-4 active:scale-[0.98]"
@@ -865,7 +865,9 @@ function WatchlistOverlay({ watchlistState, onClose }) {
                     {asset.name}
                     <ExternalLink size={12} />
                   </a>
-                  <div className="mt-0.5 text-[10px] text-stone-400">{asset.symbol || asset.longName || ""}</div>
+                  <div className="mt-0.5 text-[10px] text-stone-400">
+                    {asset.symbol || asset.longName || ""} · {asset.linkSourceName || "Yahoo"}
+                  </div>
                 </td>
                 <td className="px-2 py-3 text-right tabular-nums text-stone-950">
                   {formatPriceValue(asset.value, asset.currency)}
@@ -1639,7 +1641,7 @@ export default function MarketDashboardPrototype() {
               <Pill tone={statusPill.tone}>{statusPill.label}</Pill>
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.06em] text-stone-950">Marked</h1>
-            <p className="mt-1 text-sm leading-snug text-stone-500">Renter, valuta og prime yield samlet i én mobilvisning.</p>
+            
           </div>
           <div className="rounded-2xl bg-white px-3 py-2 text-right shadow-sm ring-1 ring-black/[0.04]">
             <div className="flex items-center justify-end gap-1 text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">
@@ -1684,9 +1686,8 @@ export default function MarketDashboardPrototype() {
           )}
         </AnimatePresence>
 
-        <section className="mb-3 flex items-center justify-between">
+        <section className="mb-3">
           <h2 className="text-sm font-semibold text-stone-800">Renter, valuta & yield</h2>
-          <Pill>{niborState.status === "ok" && yieldState.status === "ok" ? "UNION live" : niborState.status === "loading" || yieldState.status === "loading" ? "Henter UNION" : "Delvis/fallback"}</Pill>
         </section>
 
         <main className="grid grid-cols-2 gap-3">

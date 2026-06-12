@@ -1,30 +1,37 @@
-# Market Dashboard — Watchlist overlay + section heading
+# Market Dashboard — top UI cleanup + watchlist 1Y fix
 
-Denne pakken bygger videre på watchlist-title-fix.
+Denne pakken bygger videre på watchlist-nordnet-links.
 
 ## Endringer
 
-### Hovedoverskrift
-Øverste seksjonsoverskrift er endret:
+### Toppen av appen
+- Fjernet teksten under `Marked`:
+  - `Renter, valuta og prime yield samlet i én mobilvisning.`
+- Fjernet den lille statusboksen ved seksjonen `Renter, valuta & yield`, blant annet `UNION live`.
 
-- `Quick update` → `Renter, valuta & yield`
+### Watchlist 1Å
+1Å viste 0/blankt fordi backfill bare hentet ca. 1 år historikk. Da kan det mangle et godt sammenligningspunkt nøyaktig ett år tilbake, særlig når siste punkt er live/delayed.
 
-### Watchlist
-Watchlist-tilen er nå klikkbar.
+Dette er fikset ved at:
+- `/api/watchlist?action=backfill` henter 2 år historikk
+- lesingen bruker inntil 760 dager historikk
+- 1Å beregnes mot nærmeste tilgjengelige datapunkt rundt 1 år tilbake
 
-Når du trykker på den, åpnes en større overlay med:
-- ticker/navn
-- lenke til respektive Yahoo Finance-side
-- siste kurs
-- 1D
-- 1M
-- 1Å
+## Viktig etter deploy
 
-Alle ticker-/aksjenavn i overlayen åpner Yahoo Finance i ny fane.
+Kjør backfill på nytt én gang:
 
-## Test etter deploy
+`/api/watchlist?action=backfill`
 
-1. Refresh dashboardet med `?v=watchlist-overlay-heading`.
-2. Sjekk at øverste overskrift er `Renter, valuta & yield`.
-3. Trykk på Watchlist-tilen.
-4. Trykk på hvert navn/ticker og sjekk at Yahoo Finance åpnes.
+Da fylles eldre historikk inn i Supabase. Eksisterende rader dupliseres ikke for samme dato.
+
+## Test
+
+1. Deploy.
+2. Kjør `/api/watchlist?action=backfill`.
+3. Kjør `/api/watchlist`.
+4. Refresh dashboard med `?v=top-ui-watchlist-1y`.
+5. Sjekk at:
+   - teksten under `Marked` er borte
+   - statusboksen ved `Renter, valuta & yield` er borte
+   - Watchlist 1Å viser reelle tall der det finnes historikk

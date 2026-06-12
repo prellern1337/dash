@@ -12,6 +12,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/GENT.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/gentian-diagnostics-gent-xosl",
   },
   {
     id: "dnb",
@@ -22,6 +23,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/DNB.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/dnb-bank-dnb-xosl",
   },
   {
     id: "equinor",
@@ -32,6 +34,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/EQNR.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/equinor-eqnr-xosl",
   },
   {
     id: "protector",
@@ -42,6 +45,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/PROT.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/protector-forsikring-prot-xosl",
   },
   {
     id: "nykode",
@@ -52,6 +56,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/NYKD.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/nykode-therapeutics-nykd-xosl",
   },
   {
     id: "arribatec",
@@ -62,6 +67,7 @@ const ASSETS = [
     currency: "NOK",
     sourceName: "Yahoo Finance",
     sourceUrl: "https://finance.yahoo.com/quote/ARR.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/arribatec-group-arr-xosl",
   },
   {
     id: "bitcoin",
@@ -74,6 +80,15 @@ const ASSETS = [
     sourceUrl: "https://finance.yahoo.com/quote/BTC-USD/",
   },
 ];
+
+
+function displayUrlForAsset(asset) {
+  return asset.nordnetUrl || asset.sourceUrl;
+}
+
+function displaySourceForAsset(asset) {
+  return asset.nordnetUrl ? "Nordnet" : asset.sourceName;
+}
 
 function addDays(date, days) {
   const copy = new Date(date);
@@ -196,6 +211,8 @@ async function fetchYahooLiveQuote(asset) {
     liveAt: marketTime ? new Date(Number(marketTime) * 1000).toISOString() : new Date().toISOString(),
     sourceName: "Yahoo Finance",
     sourceUrl: asset.sourceUrl,
+    linkUrl: displayUrlForAsset(asset),
+    linkSourceName: displaySourceForAsset(asset),
     raw: {
       regularMarketPrice: meta.regularMarketPrice,
       previousClose: meta.previousClose,
@@ -291,13 +308,13 @@ function rowsToMetricRows(asset, historyRows, fetchedAt, existingSet = new Set()
 
 async function updateWatchlist(action) {
   const fetchedAt = new Date().toISOString();
-  const startDate = action === "backfill" ? addDays(new Date(), -370) : addDays(new Date(), -35);
+  const startDate = action === "backfill" ? addDays(new Date(), -760) : addDays(new Date(), -35);
   const saved = [];
   const errors = [];
 
   for (const asset of ASSETS) {
     try {
-      const rows = await fetchYahooHistory(asset, action === "backfill" ? "1y" : "1mo");
+      const rows = await fetchYahooHistory(asset, action === "backfill" ? "2y" : "1mo");
       const usefulRows = action === "update" ? rows.slice(-3) : rows;
       const existing = await getExistingDates(asset.metricKey, isoDate(startDate));
       const metricRows = rowsToMetricRows(asset, usefulRows, fetchedAt, existing);
@@ -343,7 +360,7 @@ function rowDate(row) {
   return String(row.observed_date || row.fetched_at || "").slice(0, 10);
 }
 
-function buildSeries(rows, metricKey, days = 370) {
+function buildSeries(rows, metricKey, days = 760) {
   const cutoff = addDays(new Date(), -days).toISOString().slice(0, 10);
 
   const relevant = (rows || [])
@@ -369,16 +386,28 @@ function pctChange(current, previous) {
   return ((current / previous) - 1) * 100;
 }
 
-function valueAtOrBefore(series, targetDate) {
+function valueNearOrBefore(series, targetDate, toleranceDays = 14) {
   const target = targetDate.toISOString().slice(0, 10);
-  let candidate = null;
+  let before = null;
+  let after = null;
 
   for (const point of series) {
-    if (point.date <= target) candidate = point;
-    else break;
+    if (point.date <= target) {
+      before = point;
+    } else {
+      after = point;
+      break;
+    }
   }
 
-  return candidate;
+  if (before) return before;
+
+  if (after) {
+    const diffDays = Math.abs((new Date(`${after.date}T12:00:00Z`).getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= toleranceDays) return after;
+  }
+
+  return null;
 }
 
 function computeChanges(series) {
@@ -387,8 +416,8 @@ function computeChanges(series) {
   const previous = series.length >= 2 ? series[series.length - 2] : null;
   const now = new Date(`${latest.date}T12:00:00Z`);
 
-  const oneMonthPoint = valueAtOrBefore(series, addDays(now, -30));
-  const oneYearPoint = valueAtOrBefore(series, addDays(now, -365));
+  const oneMonthPoint = valueNearOrBefore(series, addDays(now, -30));
+  const oneYearPoint = valueNearOrBefore(series, addDays(now, -365));
 
   return {
     change1d: previous ? pctChange(latest.value, previous.value) : null,
@@ -413,7 +442,7 @@ async function buildReadPayload(rows) {
   });
 
   const items = ASSETS.map((asset) => {
-    const storedSeries = buildSeries(rows, asset.metricKey, 370);
+    const storedSeries = buildSeries(rows, asset.metricKey, 760);
     const liveQuote = liveById.get(asset.id) || null;
     const series = mergeLivePoint(storedSeries, liveQuote);
     const latest = series[series.length - 1] || null;
@@ -438,6 +467,8 @@ async function buildReadPayload(rows) {
       currency: liveQuote?.currency || latestRow?.unit || asset.currency,
       sourceName: liveQuote?.sourceName || latestRow?.source_name || asset.sourceName,
       sourceUrl: liveQuote?.sourceUrl || latestRow?.source_url || asset.sourceUrl,
+      linkUrl: liveQuote?.linkUrl || displayUrlForAsset(asset),
+      linkSourceName: liveQuote?.linkSourceName || displaySourceForAsset(asset),
       fetchedAt: liveQuote?.liveAt || latestRow?.fetched_at || null,
       liveAt: liveQuote?.liveAt || null,
       isLive: Boolean(liveQuote),

@@ -161,12 +161,41 @@ const fallbackInsiderTrades = {
   week: [],
 };
 
+const fallbackIndices = {
+  status: "loading",
+  sourceName: "Market indices",
+  fetchedAt: null,
+  message: null,
+  errors: [],
+  items: [],
+};
+
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
   if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
   return formatPercent(Number(value));
 }
+
+function formatIndexValue(value) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  return new Intl.NumberFormat("no-NO", {
+    maximumFractionDigits: Number(value) >= 1000 ? 0 : 2,
+  }).format(Number(value));
+}
+
+function formatSignedPercent(value) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+  const number = Number(value);
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${formatNumber(number, 2)} %`;
+}
+
+function changeTone(value) {
+  if (!Number.isFinite(Number(value))) return "text-stone-400";
+  return Number(value) >= 0 ? "text-emerald-600" : "text-rose-600";
+}
+
 const formatNumber = (value, decimals = 2) => Number(value).toFixed(decimals).replace(".", ",");
 
 function hasNumericValue(value) {
@@ -685,6 +714,136 @@ function RateHistoryOverlay({ rate, onClose }) {
 }
 
 
+
+function IndexMiniChart({ data = [], change }) {
+  const values = data.map((point) => Number(point.value)).filter((value) => Number.isFinite(value));
+  const min = values.length ? Math.min(...values) : 0;
+  const max = values.length ? Math.max(...values) : 1;
+  const padding = Math.max((max - min) * 0.15, 0.01);
+
+  if (data.length < 2) {
+    return <div className="mt-2 h-14 rounded-2xl bg-stone-50" />;
+  }
+
+  return (
+    <div className={`mt-2 h-14 ${changeTone(change)}`}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 6, right: 2, left: 2, bottom: 2 }}>
+          <YAxis hide domain={[min - padding, max + padding]} />
+          <Line type="monotone" dataKey="value" stroke="currentColor" strokeWidth={2.4} dot={false} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function IndexTile({ index, onClick }) {
+  return (
+    <Tile
+      title={index.name}
+      source={index.sourceName || "Index"}
+      accent={Number(index.change1d) >= 0 ? "emerald" : "rose"}
+      icon={<LineChartIcon size={17} />}
+      onClick={onClick}
+      size="standard"
+    >
+      <div className="mt-1 flex items-start justify-between gap-2">
+        <div>
+          <div className="text-2xl font-semibold tracking-[-0.05em] text-stone-950">{formatIndexValue(index.value)}</div>
+          <div className="mt-1 text-[11px] text-stone-400">{index.date || "—"}</div>
+        </div>
+        <div className={`rounded-full bg-stone-50 px-2 py-1 text-[11px] font-semibold tabular-nums ${changeTone(index.change1d)}`}>
+          {formatSignedPercent(index.change1d)}
+        </div>
+      </div>
+      <IndexMiniChart data={index.sparkline || index.history || []} change={index.change1d} />
+      <div className="mt-2 flex justify-between text-[10px] text-stone-400">
+        <span>1M {formatSignedPercent(index.change1m)}</span>
+        <span>YTD {formatSignedPercent(index.ytd)}</span>
+      </div>
+    </Tile>
+  );
+}
+
+function IndexOverlay({ index, onClose }) {
+  const data = index.history || [];
+  const values = data.map((point) => Number(point.value)).filter((value) => Number.isFinite(value));
+  const min = values.length ? Math.min(...values) : Number(index.value) || 0;
+  const max = values.length ? Math.max(...values) : Number(index.value) || 1;
+  const padding = Math.max((max - min) * 0.18, 0.01);
+
+  return (
+    <Overlay
+      title={index.name}
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={index.sourceUrl || "#"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne kilde
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="mb-4 grid grid-cols-2 gap-3">
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Siste verdi</div>
+          <div className="mt-1 text-2xl font-semibold tracking-[-0.04em] text-stone-950">{formatIndexValue(index.value)}</div>
+          <div className="mt-1 text-[11px] text-stone-400">Dato: {index.date || "—"}</div>
+        </div>
+        <div className="rounded-2xl bg-stone-50 p-3">
+          <div className="text-[11px] font-medium uppercase tracking-[0.12em] text-stone-400">Siste dag</div>
+          <div className={`mt-1 text-2xl font-semibold tracking-[-0.04em] ${changeTone(index.change1d)}`}>{formatSignedPercent(index.change1d)}</div>
+          <div className="mt-1 text-[11px] text-stone-400">1M {formatSignedPercent(index.change1m)} · YTD {formatSignedPercent(index.ytd)}</div>
+        </div>
+      </div>
+
+      {data.length >= 2 ? (
+        <div className="h-64 rounded-3xl bg-stone-50 p-3">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={data} margin={{ top: 10, right: 14, left: 6, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(120,113,108,0.18)" />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 10, fill: "#78716c" }}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={28}
+                interval="preserveStartEnd"
+                tickFormatter={(value) => formatSwapChartDate(value, data)}
+              />
+              <YAxis
+                domain={[min - padding, max + padding]}
+                tick={{ fontSize: 10, fill: "#57534e" }}
+                tickLine={false}
+                axisLine={false}
+                width={58}
+                tickMargin={8}
+                tickFormatter={(value) => formatIndexValue(value)}
+              />
+              <Tooltip
+                contentStyle={{ borderRadius: 16, border: "0", boxShadow: "0 14px 40px rgba(0,0,0,0.12)" }}
+                formatter={(value) => [formatIndexValue(value), index.name]}
+                labelFormatter={(value) => `Dato: ${formatTooltipDate(value)}`}
+              />
+              <Line type="monotone" dataKey="value" stroke="currentColor" strokeWidth={3} dot={false} className="text-stone-900" />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      ) : (
+        <div className="rounded-3xl bg-stone-50 p-4 text-sm text-stone-500">
+          For lite historikk til graf ennå. Kjør <span className="font-medium text-stone-700">/api/indices?action=backfill</span> etter deploy.
+        </div>
+      )}
+    </Overlay>
+  );
+}
+
+
+
 function InsiderTradesTable({ trades, compact = false }) {
   const visible = trades || [];
 
@@ -830,10 +989,12 @@ export default function MarketDashboardPrototype() {
   const [selectedFx, setSelectedFx] = useState(null);
   const [selectedSwap, setSelectedSwap] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
+  const [selectedIndex, setSelectedIndex] = useState(null);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
+  const [indicesState, setIndicesState] = useState(fallbackIndices);
   const [swapsState, setSwapsState] = useState(fallbackSwaps);
   const [fxState, setFxState] = useState({
     status: "loading",
@@ -1015,6 +1176,36 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    async function loadIndices() {
+      try {
+        const response = await fetch(`/api/indices?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente markedsindekser.");
+        }
+
+        if (!cancelled) {
+          setIndicesState({
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "Market indices",
+            fetchedAt: payload.fetchedAt || null,
+            message: payload.message || (payload.errors?.length ? payload.errors.join(" | ") : null),
+            errors: payload.errors || [],
+            items: payload.items || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setIndicesState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente markedsindekser.",
+          }));
+        }
+      }
+    }
+
     async function loadYields() {
       try {
         const response = await fetch(`/api/yields?ts=${Date.now()}`, { cache: "no-store" });
@@ -1051,6 +1242,7 @@ export default function MarketDashboardPrototype() {
     loadFx();
     loadStibor();
     loadNibor();
+    loadIndices();
     loadYields();
 
     return () => {
@@ -1059,16 +1251,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = insiderState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = insiderState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -1103,6 +1295,13 @@ export default function MarketDashboardPrototype() {
   }, [swapsState.status, fxState.status, stiborState.status, niborState.status, yieldState.status, hasError]);
 
   const warningContent = useMemo(() => {
+    if (indicesState.status === "error") {
+      return {
+        title: "Markedsindekser feilet",
+        message: indicesState.message || "Kunne ikke lese markedsindekser.",
+      };
+    }
+
     if (insiderState.status === "error") {
       return {
         title: "Innsidehandler feilet",
@@ -1354,6 +1553,17 @@ export default function MarketDashboardPrototype() {
             />
           </Tile>
 
+          {indicesState.items.length > 0 && (
+            <div className="col-span-2 mt-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-stone-800">Markedsindekser</h3>
+              <span className="text-[11px] text-stone-400">Mini-graf: siste 60 dager</span>
+            </div>
+          )}
+
+          {indicesState.items.map((index) => (
+            <IndexTile key={index.id} index={index} onClick={() => setSelectedIndex(index)} />
+          ))}
+
           <Tile
             title="Innsidehandler"
             source="NewsWeb"
@@ -1378,6 +1588,7 @@ export default function MarketDashboardPrototype() {
       {selectedFx && <FxOverlay pair={selectedFx} onClose={() => setSelectedFx(null)} />}
       {selectedSwap && <SwapOverlay currency={selectedSwap} swapsState={swapsState} onClose={() => setSelectedSwap(null)} />}
       {selectedRate && <RateHistoryOverlay rate={selectedRate} onClose={() => setSelectedRate(null)} />}
+      {selectedIndex && <IndexOverlay index={selectedIndex} onClose={() => setSelectedIndex(null)} />}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>

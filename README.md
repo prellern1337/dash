@@ -1,25 +1,28 @@
-# Market Dashboard — NIBOR/STIBOR history state fix
+# Market Dashboard — indices tile order fix
 
-Denne pakken fikser en frontend-bug i NIBOR/STIBOR-historikkoverlayene.
+Denne pakken bygger videre på market-dashboard-pwa-indices-tiles og fikser plasseringen i dashboardet.
 
-## Hva var feil?
+## Rekkefølge i appen
 
-`/api/nibor` og `/api/stibor` returnerte `history`, men frontend lagret ikke `payload.history` i `niborState` og `stiborState`.
+Indeks-tilene ligger nå:
 
-Derfor viste overlayen:
-- Siste verdi: riktig
-- Historikk: 0 dagspunkter
+1. Etter rente-/valuta-/Prime yield-tilene
+2. Rett før den brede Innsidehandler-tilen
+3. Innsidehandler ligger fortsatt nederst
 
-## Endring
+## Ny API
 
-Frontend lagrer nå:
-- `history: payload.history || []`
+`/api/indices`
 
-for både NIBOR og STIBOR.
+- GET: leser siste verdi + historikk fra Supabase
+- GET `?action=update`: henter siste dag(er)
+- GET `?action=backfill`: henter ca. siste 12 mnd historikk
 
 ## Test etter deploy
 
-1. `/api/nibor` → sjekk at `history` har rader.
-2. `/api/stibor` → sjekk at `history` har rader.
-3. Refresh dashboardet med `?v=rate-history-state-fix`.
-4. Trykk på 3M NIBOR og 3M STIBOR.
+1. `/api/indices?action=backfill`
+2. `/api/indices`
+3. Refresh dashboardet med `?v=indices-order`
+4. Sjekk at:
+   - indeksene ligger under SEK/NOK og Prime yield
+   - Innsidehandler ligger nederst

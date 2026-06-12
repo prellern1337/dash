@@ -964,6 +964,7 @@ export default function MarketDashboardPrototype() {
             sourceDocument: payload.sourceDocument || null,
             observedDate: payload.observedDate || null,
             fetchedAt: payload.fetchedAt || null,
+            history: payload.history || [],
             message: payload.message || null,
             lastRun: payload.lastRun || null,
           });
@@ -998,6 +999,7 @@ export default function MarketDashboardPrototype() {
             sourceDocument: payload.sourceDocument || null,
             observedDate: payload.observedDate || null,
             fetchedAt: payload.fetchedAt || null,
+            history: payload.history || [],
             message: payload.message || null,
             lastRun: payload.lastRun || null,
           });

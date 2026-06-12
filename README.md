@@ -1,40 +1,25 @@
-# Market Dashboard — NIBOR/STIBOR history overlay
+# Market Dashboard — NIBOR/STIBOR history state fix
 
-Denne pakken bygger videre på API-konsolidering steg 1 og legger til historikkvisning for NIBOR/STIBOR.
+Denne pakken fikser en frontend-bug i NIBOR/STIBOR-historikkoverlayene.
 
-## Endringer
+## Hva var feil?
 
-- `/api/nibor` returnerer nå `history`.
-- `/api/stibor` returnerer nå `history`.
-- Historikk bygges fra `market_metrics` i Supabase.
-- Viser siste lagrede verdi per dag, inntil siste 180 dager.
-- 3M NIBOR- og 3M STIBOR-tilene er klikkbare.
-- Overlay viser:
-  - siste verdi
-  - hentet-tidspunkt
-  - antall dagspunkter
-  - historisk linjegraf
-- Bruker samme dynamiske X-akseformat som SWAP:
-  - kort historikk: `dd.mm.åå`
-  - mellomlang: `mm.åå`
-  - lang: `åååå`
+`/api/nibor` og `/api/stibor` returnerte `history`, men frontend lagret ikke `payload.history` i `niborState` og `stiborState`.
 
-## API-struktur
+Derfor viste overlayen:
+- Siste verdi: riktig
+- Historikk: 0 dagspunkter
 
-Fortsatt 9 filer i `/api`:
-- `fx.js`
-- `insider-trades.js`
-- `nibor.js`
-- `stibor.js`
-- `swaps.js`
-- `update-nibor.js`
-- `update-rates.js`
-- `update-stibor.js`
-- `yields.js`
+## Endring
+
+Frontend lagrer nå:
+- `history: payload.history || []`
+
+for både NIBOR og STIBOR.
 
 ## Test etter deploy
 
-1. `/api/nibor` → skal inneholde `history`.
-2. `/api/stibor` → skal inneholde `history`.
-3. Refresh dashboardet.
+1. `/api/nibor` → sjekk at `history` har rader.
+2. `/api/stibor` → sjekk at `history` har rader.
+3. Refresh dashboardet med `?v=rate-history-state-fix`.
 4. Trykk på 3M NIBOR og 3M STIBOR.

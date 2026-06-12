@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
+import updateYieldsHandler from "../lib/update-yields.js";
 
 const SOURCES = [
   { key: "union", label: "UNION" },
@@ -45,7 +46,7 @@ function average(values) {
   return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 }
 
-export default async function handler(request, response) {
+async function readYieldsHandler(request, response) {
   try {
     const rows = await fetchRows();
 
@@ -130,4 +131,17 @@ export default async function handler(request, response) {
       message: error instanceof Error ? error.message : "Ukjent feil ved lesing av prime yield.",
     });
   }
+}
+
+
+export default async function handler(request, response) {
+  const action =
+    request.query?.action ||
+    new URL(request.url || "https://local/api/yields", "https://local").searchParams.get("action");
+
+  if (action === "update") {
+    return updateYieldsHandler(request, response);
+  }
+
+  return readYieldsHandler(request, response);
 }

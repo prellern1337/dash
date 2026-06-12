@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
+import updateSwapsHandler from "../lib/update-swaps.js";
 
 const WANTED = [
   { currency: "NOK", tenor: "3 Yr", key: "swap_nok_3y" },
@@ -79,7 +80,7 @@ function buildHistory(rows) {
   };
 }
 
-export default async function handler(request, response) {
+async function readSwapsHandler(request, response) {
   try {
     const rows = await fetchRows();
     const data = emptyData();
@@ -144,4 +145,17 @@ export default async function handler(request, response) {
       message: error instanceof Error ? error.message : "Ukjent feil ved lesing av SEB swap-renter.",
     });
   }
+}
+
+
+export default async function handler(request, response) {
+  const action =
+    request.query?.action ||
+    new URL(request.url || "https://local/api/swaps", "https://local").searchParams.get("action");
+
+  if (action === "update") {
+    return updateSwapsHandler(request, response);
+  }
+
+  return readSwapsHandler(request, response);
 }

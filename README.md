@@ -1,20 +1,59 @@
-# Market Dashboard — SWAP axis date format
+# Market Dashboard — API consolidation step 1
 
-Denne pakken bygger videre på SWAP history overlay.
+Denne pakken konsoliderer API-ene for SWAP og YIELD slik at vi frigjør plass under Vercel Hobby-grensen.
 
-## Endring
+## Endringer
 
-X-aksen i SWAP-grafene bruker nå dynamisk datoformat:
+### SWAP
+Før:
+- `/api/swaps`
+- `/api/update-swaps`
 
-- Kort historikk, inntil 90 dager: `dd.mm.åå`
-- Mellomlang historikk, inntil 2 år: `mm.åå`
-- Lang historikk: `åååå`
+Nå:
+- `/api/swaps`
+- `/api/swaps?action=update`
 
-Tooltip-datoen vises også som `dd.mm.åå`.
+`api/update-swaps.js` er flyttet til `lib/update-swaps.js`, så den teller ikke lenger som en Vercel Serverless Function.
 
-## Test
+### YIELD
+Før:
+- `/api/yields`
+- `/api/update-yields`
 
-1. Deploy pakken.
-2. Refresh dashboardet.
-3. Trykk på Norge- eller Sverige-SWAP-tilen.
-4. X-aksen skal vise f.eks. `21.05.26` så lenge historikken er kort.
+Nå:
+- `/api/yields`
+- `/api/yields?action=update`
+
+`api/update-yields.js` er flyttet til `lib/update-yields.js`, så den teller ikke lenger som en Vercel Serverless Function.
+
+## API-filer etter rydding
+
+Det skal nå være 9 filer i `/api`:
+
+- `fx.js`
+- `insider-trades.js`
+- `nibor.js`
+- `stibor.js`
+- `swaps.js`
+- `update-nibor.js`
+- `update-rates.js`
+- `update-stibor.js`
+- `yields.js`
+
+Dette gir plass til en fremtidig `indices.js`.
+
+## Viktig
+
+GitHub Actions er oppdatert:
+- `update-swaps.yml` kaller nå `/api/swaps?action=update`
+- `update-yields.yml` kaller nå `/api/yields?action=update`
+
+## Test etter deploy
+
+1. `/api/swaps`
+2. `/api/swaps?action=update`
+3. `/api/yields`
+4. `/api/yields?action=update`
+5. Kjør GitHub Actions manuelt:
+   - Update SEB swaps
+   - Update prime yields

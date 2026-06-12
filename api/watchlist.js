@@ -1,0 +1,495 @@
+import { getSupabaseAdmin } from "../lib/supabase.js";
+
+export const config = { maxDuration: 60 };
+
+const ASSETS = [
+  {
+    id: "gentian",
+    metricKey: "watch_gentian",
+    name: "Gentian",
+    longName: "Gentian Diagnostics ASA",
+    symbol: "GENT.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/GENT.OL/",
+  },
+  {
+    id: "dnb",
+    metricKey: "watch_dnb",
+    name: "DNB",
+    longName: "DNB Bank ASA",
+    symbol: "DNB.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/DNB.OL/",
+  },
+  {
+    id: "equinor",
+    metricKey: "watch_equinor",
+    name: "Equinor",
+    longName: "Equinor ASA",
+    symbol: "EQNR.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/EQNR.OL/",
+  },
+  {
+    id: "protector",
+    metricKey: "watch_protector",
+    name: "Protector",
+    longName: "Protector Forsikring ASA",
+    symbol: "PROT.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/PROT.OL/",
+  },
+  {
+    id: "nykode",
+    metricKey: "watch_nykode",
+    name: "Nykode",
+    longName: "Nykode Therapeutics AS",
+    symbol: "NYKD.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/NYKD.OL/",
+  },
+  {
+    id: "arribatec",
+    metricKey: "watch_arribatec",
+    name: "Arribatec",
+    longName: "Arribatec Group ASA",
+    symbol: "ARR.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/ARR.OL/",
+  },
+  {
+    id: "bitcoin",
+    metricKey: "watch_bitcoin",
+    name: "Bitcoin",
+    longName: "Bitcoin USD",
+    symbol: "BTC-USD",
+    currency: "USD",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/BTC-USD/",
+  },
+];
+
+function addDays(date, days) {
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
+}
+
+function isoDate(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+async function fetchYahooHistory(asset, range = "1y") {
+  const symbol = encodeURIComponent(asset.symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "en-US,en;q=0.9,nb-NO;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!response.ok) throw new Error(`Yahoo Finance svarte med ${response.status} for ${asset.name}.`);
+
+  const json = await response.json();
+  const result = json?.chart?.result?.[0];
+  const error = json?.chart?.error;
+
+  if (error) throw new Error(error.description || `Yahoo Finance-feil for ${asset.name}.`);
+
+  const timestamps = result?.timestamp || [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  const meta = result?.meta || {};
+
+  const rows = timestamps
+    .map((timestamp, i) => ({
+      date: new Date(timestamp * 1000).toISOString().slice(0, 10),
+      open: quote.open?.[i] ?? null,
+      high: quote.high?.[i] ?? null,
+      low: quote.low?.[i] ?? null,
+      close: quote.close?.[i] ?? null,
+      volume: quote.volume?.[i] ?? null,
+      currency: meta.currency || asset.currency,
+    }))
+    .filter((row) => row.date && Number.isFinite(Number(row.close)))
+    .map((row) => ({
+      ...row,
+      open: Number.isFinite(Number(row.open)) ? Number(row.open) : null,
+      high: Number.isFinite(Number(row.high)) ? Number(row.high) : null,
+      low: Number.isFinite(Number(row.low)) ? Number(row.low) : null,
+      close: Number(row.close),
+      volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : null,
+    }));
+
+  if (!rows.length) throw new Error(`Yahoo Finance returnerte ingen data for ${asset.name} (${asset.symbol}).`);
+
+  return rows;
+}
+
+async function fetchYahooLiveQuote(asset) {
+  const symbol = encodeURIComponent(asset.symbol);
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=5d&interval=1d`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "en-US,en;q=0.9,nb-NO;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!response.ok) throw new Error(`Yahoo Finance live svarte med ${response.status} for ${asset.name}.`);
+
+  const json = await response.json();
+  const result = json?.chart?.result?.[0];
+  const error = json?.chart?.error;
+
+  if (error) throw new Error(error.description || `Yahoo Finance live-feil for ${asset.name}.`);
+
+  const meta = result?.meta || {};
+  const timestamps = result?.timestamp || [];
+  const quote = result?.indicators?.quote?.[0] || {};
+  const closes = quote.close || [];
+
+  const validCloses = closes
+    .map((close, index) => ({ close: Number(close), timestamp: timestamps[index] }))
+    .filter((item) => Number.isFinite(item.close) && Number.isFinite(Number(item.timestamp)));
+
+  const lastClose = validCloses[validCloses.length - 1] || null;
+  const liveValue = Number.isFinite(Number(meta.regularMarketPrice))
+    ? Number(meta.regularMarketPrice)
+    : lastClose?.close ?? null;
+
+  if (!Number.isFinite(Number(liveValue))) {
+    throw new Error(`Fant ikke live/siste kurs for ${asset.name}.`);
+  }
+
+  const marketTime = Number.isFinite(Number(meta.regularMarketTime))
+    ? Number(meta.regularMarketTime)
+    : lastClose?.timestamp;
+
+  const liveDate = marketTime
+    ? new Date(Number(marketTime) * 1000).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  const previousClose = Number.isFinite(Number(meta.previousClose))
+    ? Number(meta.previousClose)
+    : validCloses.length >= 2
+      ? validCloses[validCloses.length - 2].close
+      : null;
+
+  return {
+    value: Number(liveValue),
+    date: liveDate,
+    currency: meta.currency || asset.currency,
+    previousClose,
+    liveAt: marketTime ? new Date(Number(marketTime) * 1000).toISOString() : new Date().toISOString(),
+    sourceName: "Yahoo Finance",
+    sourceUrl: asset.sourceUrl,
+    raw: {
+      regularMarketPrice: meta.regularMarketPrice,
+      previousClose: meta.previousClose,
+      exchangeName: meta.exchangeName,
+      instrumentType: meta.instrumentType,
+      timezone: meta.timezone,
+      regularMarketTime: meta.regularMarketTime,
+    },
+  };
+}
+
+function mergeLivePoint(series, liveQuote) {
+  if (!liveQuote || !Number.isFinite(Number(liveQuote.value))) return series;
+
+  const merged = [...series];
+  const livePoint = { date: liveQuote.date, value: Number(liveQuote.value) };
+
+  const existingIndex = merged.findIndex((point) => point.date === livePoint.date);
+  if (existingIndex >= 0) {
+    merged[existingIndex] = livePoint;
+  } else {
+    merged.push(livePoint);
+  }
+
+  return merged.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+
+async function getExistingDates(metricKey, cutoffIso) {
+  const supabase = getSupabaseAdmin();
+
+  const { data, error } = await supabase
+    .from("market_metrics")
+    .select("metric_key,observed_date")
+    .eq("metric_key", metricKey)
+    .gte("observed_date", cutoffIso)
+    .not("observed_date", "is", null);
+
+  if (error) throw error;
+
+  return new Set((data || []).map((row) => `${row.metric_key}|${row.observed_date}`));
+}
+
+async function insertRows(rows) {
+  if (!rows.length) return [];
+
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("market_metrics")
+    .insert(rows)
+    .select("*");
+
+  if (error) throw error;
+  return data || [];
+}
+
+function rowsToMetricRows(asset, historyRows, fetchedAt, existingSet = new Set()) {
+  const metricRows = [];
+
+  for (const row of historyRows) {
+    const key = `${asset.metricKey}|${row.date}`;
+    if (existingSet.has(key)) continue;
+
+    metricRows.push({
+      metric_key: asset.metricKey,
+      value: row.close,
+      unit: row.currency || asset.currency,
+      source_name: asset.sourceName,
+      source_url: asset.sourceUrl,
+      source_document: `${asset.name} daily close`,
+      observed_date: row.date,
+      fetched_at: fetchedAt,
+      status: "ok",
+      message: null,
+      raw: {
+        assetId: asset.id,
+        name: asset.name,
+        longName: asset.longName,
+        symbol: asset.symbol,
+        currency: row.currency || asset.currency,
+        open: row.open,
+        high: row.high,
+        low: row.low,
+        close: row.close,
+        volume: row.volume,
+        provider: "yahoo_chart",
+      },
+    });
+  }
+
+  return metricRows;
+}
+
+async function updateWatchlist(action) {
+  const fetchedAt = new Date().toISOString();
+  const startDate = action === "backfill" ? addDays(new Date(), -370) : addDays(new Date(), -35);
+  const saved = [];
+  const errors = [];
+
+  for (const asset of ASSETS) {
+    try {
+      const rows = await fetchYahooHistory(asset, action === "backfill" ? "1y" : "1mo");
+      const usefulRows = action === "update" ? rows.slice(-3) : rows;
+      const existing = await getExistingDates(asset.metricKey, isoDate(startDate));
+      const metricRows = rowsToMetricRows(asset, usefulRows, fetchedAt, existing);
+      const inserted = await insertRows(metricRows);
+
+      saved.push({
+        asset: asset.id,
+        metricKey: asset.metricKey,
+        symbol: asset.symbol,
+        fetchedRows: usefulRows.length,
+        savedRows: inserted.length,
+      });
+    } catch (error) {
+      errors.push(`${asset.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  return {
+    status: errors.length ? (saved.length ? "partial" : "error") : "ok",
+    fetchedAt,
+    saved,
+    errors,
+  };
+}
+
+async function fetchRows() {
+  const supabase = getSupabaseAdmin();
+  const keys = ASSETS.map((asset) => asset.metricKey);
+
+  const { data, error } = await supabase
+    .from("market_metrics")
+    .select("*")
+    .in("metric_key", keys)
+    .eq("status", "ok")
+    .order("observed_date", { ascending: false })
+    .limit(4000);
+
+  if (error) throw error;
+  return data || [];
+}
+
+function rowDate(row) {
+  return String(row.observed_date || row.fetched_at || "").slice(0, 10);
+}
+
+function buildSeries(rows, metricKey, days = 370) {
+  const cutoff = addDays(new Date(), -days).toISOString().slice(0, 10);
+
+  const relevant = (rows || [])
+    .filter((row) => row.metric_key === metricKey && Number.isFinite(Number(row.value)))
+    .map((row) => ({
+      date: rowDate(row),
+      value: Number(row.value),
+      fetchedAt: row.fetched_at,
+    }))
+    .filter((row) => row.date && row.date >= cutoff)
+    .sort((a, b) => new Date(a.fetchedAt).getTime() - new Date(b.fetchedAt).getTime());
+
+  const byDate = new Map();
+  for (const row of relevant) byDate.set(row.date, row.value);
+
+  return Array.from(byDate.entries())
+    .map(([date, value]) => ({ date, value }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function pctChange(current, previous) {
+  if (!Number.isFinite(current) || !Number.isFinite(previous) || previous === 0) return null;
+  return ((current / previous) - 1) * 100;
+}
+
+function valueAtOrBefore(series, targetDate) {
+  const target = targetDate.toISOString().slice(0, 10);
+  let candidate = null;
+
+  for (const point of series) {
+    if (point.date <= target) candidate = point;
+    else break;
+  }
+
+  return candidate;
+}
+
+function computeChanges(series) {
+  if (!series.length) return { change1d: null, change1m: null, change1y: null };
+  const latest = series[series.length - 1];
+  const previous = series.length >= 2 ? series[series.length - 2] : null;
+  const now = new Date(`${latest.date}T12:00:00Z`);
+
+  const oneMonthPoint = valueAtOrBefore(series, addDays(now, -30));
+  const oneYearPoint = valueAtOrBefore(series, addDays(now, -365));
+
+  return {
+    change1d: previous ? pctChange(latest.value, previous.value) : null,
+    change1m: oneMonthPoint ? pctChange(latest.value, oneMonthPoint.value) : null,
+    change1y: oneYearPoint ? pctChange(latest.value, oneYearPoint.value) : null,
+  };
+}
+
+async function buildReadPayload(rows) {
+  const liveResults = await Promise.allSettled(ASSETS.map((asset) => fetchYahooLiveQuote(asset)));
+  const liveById = new Map();
+  const liveErrors = [];
+
+  liveResults.forEach((result, index) => {
+    const asset = ASSETS[index];
+
+    if (result.status === "fulfilled") {
+      liveById.set(asset.id, result.value);
+    } else {
+      liveErrors.push(`${asset.name}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    }
+  });
+
+  const items = ASSETS.map((asset) => {
+    const storedSeries = buildSeries(rows, asset.metricKey, 370);
+    const liveQuote = liveById.get(asset.id) || null;
+    const series = mergeLivePoint(storedSeries, liveQuote);
+    const latest = series[series.length - 1] || null;
+    const changes = computeChanges(series);
+    const liveChange1d =
+      liveQuote && Number.isFinite(Number(liveQuote.previousClose))
+        ? pctChange(Number(liveQuote.value), Number(liveQuote.previousClose))
+        : changes.change1d;
+
+    const latestRow = rows
+      .filter((row) => row.metric_key === asset.metricKey)
+      .sort((a, b) => new Date(b.fetched_at).getTime() - new Date(a.fetched_at).getTime())[0];
+
+    return {
+      id: asset.id,
+      metricKey: asset.metricKey,
+      name: asset.name,
+      longName: asset.longName,
+      symbol: asset.symbol,
+      value: liveQuote?.value ?? latest?.value ?? null,
+      date: liveQuote?.date ?? latest?.date ?? null,
+      currency: liveQuote?.currency || latestRow?.unit || asset.currency,
+      sourceName: liveQuote?.sourceName || latestRow?.source_name || asset.sourceName,
+      sourceUrl: liveQuote?.sourceUrl || latestRow?.source_url || asset.sourceUrl,
+      fetchedAt: liveQuote?.liveAt || latestRow?.fetched_at || null,
+      liveAt: liveQuote?.liveAt || null,
+      isLive: Boolean(liveQuote),
+      history: series,
+      change1d: liveChange1d,
+      change1m: changes.change1m,
+      change1y: changes.change1y,
+    };
+  });
+
+  const missingErrors = items
+    .filter((item) => !Number.isFinite(Number(item.value)))
+    .map((item) => `${item.name}: mangler verdi`);
+
+  const errors = [...missingErrors, ...liveErrors];
+
+  return {
+    status: missingErrors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
+    sourceName: "Watchlist",
+    fetchedAt: new Date().toISOString(),
+    live: true,
+    note: "Watchlist leser siste tilgjengelige Yahoo-quote ved dashboard-load. Historikk/1M/1Y leses fra Supabase.",
+    items,
+    errors,
+  };
+}
+
+export default async function handler(request, response) {
+  try {
+    const action =
+      request.query?.action ||
+      new URL(request.url || "https://local/api/watchlist", "https://local").searchParams.get("action");
+
+    if (action === "update" || action === "backfill") {
+      const result = await updateWatchlist(action);
+      response.setHeader("Cache-Control", "no-store, max-age=0");
+      response.status(200).json({
+        metricGroup: "watchlist",
+        action,
+        ...result,
+      });
+      return;
+    }
+
+    const rows = await fetchRows();
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    response.status(200).json(await buildReadPayload(rows));
+  } catch (error) {
+    response.status(500).json({
+      status: "error",
+      metricGroup: "watchlist",
+      message: error instanceof Error ? error.message : "Ukjent feil i watchlist-endepunktet.",
+    });
+  }
+}

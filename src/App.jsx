@@ -170,6 +170,15 @@ const fallbackIndices = {
   items: [],
 };
 
+const fallbackWatchlist = {
+  status: "loading",
+  sourceName: "Watchlist",
+  fetchedAt: null,
+  message: null,
+  errors: [],
+  items: [],
+};
+
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
@@ -194,6 +203,18 @@ function formatSignedPercent(value) {
 function changeTone(value) {
   if (!Number.isFinite(Number(value))) return "text-stone-400";
   return Number(value) >= 0 ? "text-emerald-600" : "text-rose-600";
+}
+
+function formatPriceValue(value, currency) {
+  if (value === null || value === undefined || value === "" || !Number.isFinite(Number(value))) return "—";
+
+  const number = Number(value);
+  const decimals = currency === "USD" && number > 1000 ? 0 : number >= 100 ? 1 : number >= 10 ? 2 : 3;
+
+  return new Intl.NumberFormat("no-NO", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  }).format(number);
 }
 
 function isInverseRiskIndex(index) {
@@ -741,6 +762,135 @@ function RateHistoryOverlay({ rate, onClose }) {
 
 
 
+
+function WatchlistTile({ watchlistState, onClick }) {
+  const rows = watchlistState.items || [];
+
+  return (
+    <Tile
+      title="Watchlist"
+      source="Yahoo"
+      accent="slate"
+      icon={<BarChart3 size={17} />}
+      size="xlarge"
+      wide
+      onClick={onClick}
+    >
+      <div className="mt-2 overflow-hidden rounded-2xl border border-stone-100">
+        <table className="w-full text-[11px]">
+          <thead className="bg-stone-50 text-[9px] uppercase tracking-[0.08em] text-stone-400">
+            <tr>
+              <th className="px-2 py-2 text-left font-semibold">Navn</th>
+              <th className="px-1 py-2 text-right font-semibold">Kurs</th>
+              <th className="px-1 py-2 text-right font-semibold">1D</th>
+              <th className="px-1 py-2 text-right font-semibold">1M</th>
+              <th className="px-2 py-2 text-right font-semibold">1Å</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((asset) => (
+              <tr key={asset.id} className="border-t border-stone-100">
+                <td className="px-2 py-1.5 font-medium text-stone-800">
+                  <a
+                    href={asset.sourceUrl || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-stone-300 underline-offset-4"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {asset.name}
+                  </a>
+                </td>
+                <td className="px-1 py-1.5 text-right tabular-nums text-stone-950">{formatPriceValue(asset.value, asset.currency)}</td>
+                <td className={`px-1 py-1.5 text-right tabular-nums ${changeTone(asset.change1d)}`}>{formatSignedPercent(asset.change1d)}</td>
+                <td className={`px-1 py-1.5 text-right tabular-nums ${changeTone(asset.change1m)}`}>{formatSignedPercent(asset.change1m)}</td>
+                <td className={`px-2 py-1.5 text-right tabular-nums ${changeTone(asset.change1y)}`}>{formatSignedPercent(asset.change1y)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={5} className="px-2 py-4 text-center text-stone-400">
+                  Ingen kurser lagret ennå. Kjør /api/watchlist?action=backfill.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-stone-400">
+        <span>{watchlistState.status === "loading" ? "Leser kurser" : `Live/delayed: ${formatDateTimeShort(watchlistState.fetchedAt)}`}</span>
+        <span>{rows.length} instrumenter</span>
+      </div>
+    </Tile>
+  );
+}
+
+
+function WatchlistOverlay({ watchlistState, onClose }) {
+  const rows = watchlistState.items || [];
+
+  return (
+    <Overlay
+      title="Watchlist"
+      subtitle="Siste Yahoo-kurs/delayed quote, med endring mot historiske sluttkurser."
+      onClose={onClose}
+    >
+      <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
+        {watchlistState.status === "loading"
+          ? "Leser kurser..."
+          : `Live/delayed: ${formatDateTimeShort(watchlistState.fetchedAt)}. 1M og 1Å beregnes fra lagret historikk i Supabase.`}
+      </div>
+
+      <div className="overflow-hidden rounded-3xl border border-stone-100">
+        <table className="w-full text-sm">
+          <thead className="bg-stone-50 text-[10px] uppercase tracking-[0.08em] text-stone-400">
+            <tr>
+              <th className="px-3 py-3 text-left font-semibold">Ticker</th>
+              <th className="px-2 py-3 text-right font-semibold">Kurs</th>
+              <th className="px-2 py-3 text-right font-semibold">1D</th>
+              <th className="px-2 py-3 text-right font-semibold">1M</th>
+              <th className="px-3 py-3 text-right font-semibold">1Å</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((asset) => (
+              <tr key={asset.id} className="border-t border-stone-100">
+                <td className="px-3 py-3">
+                  <a
+                    href={asset.sourceUrl || "#"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-stone-800 underline decoration-stone-300 underline-offset-4 active:scale-[0.98]"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {asset.name}
+                    <ExternalLink size={12} />
+                  </a>
+                  <div className="mt-0.5 text-[10px] text-stone-400">{asset.symbol || asset.longName || ""}</div>
+                </td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-950">
+                  {formatPriceValue(asset.value, asset.currency)}
+                  <div className="mt-0.5 text-[10px] text-stone-400">{asset.currency || ""}</div>
+                </td>
+                <td className={`px-2 py-3 text-right tabular-nums ${changeTone(asset.change1d)}`}>{formatSignedPercent(asset.change1d)}</td>
+                <td className={`px-2 py-3 text-right tabular-nums ${changeTone(asset.change1m)}`}>{formatSignedPercent(asset.change1m)}</td>
+                <td className={`px-3 py-3 text-right tabular-nums ${changeTone(asset.change1y)}`}>{formatSignedPercent(asset.change1y)}</td>
+              </tr>
+            )) : (
+              <tr>
+                <td colSpan={5} className="px-3 py-5 text-center text-stone-400">
+                  Ingen kurser lagret ennå. Kjør /api/watchlist?action=backfill.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Overlay>
+  );
+}
+
+
+
 function IndexMiniChart({ data = [], change, index }) {
   const values = data.map((point) => Number(point.value)).filter((value) => Number.isFinite(value));
   const min = values.length ? Math.min(...values) : 0;
@@ -1031,11 +1181,13 @@ export default function MarketDashboardPrototype() {
   const [selectedSwap, setSelectedSwap] = useState(null);
   const [selectedRate, setSelectedRate] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
+  const [showWatchlist, setShowWatchlist] = useState(false);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
   const [indicesState, setIndicesState] = useState(fallbackIndices);
+  const [watchlistState, setWatchlistState] = useState(fallbackWatchlist);
   const [swapsState, setSwapsState] = useState(fallbackSwaps);
   const [fxState, setFxState] = useState({
     status: "loading",
@@ -1217,6 +1369,36 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    async function loadWatchlist() {
+      try {
+        const response = await fetch(`/api/watchlist?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente watchlist-kurser.");
+        }
+
+        if (!cancelled) {
+          setWatchlistState({
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "Watchlist",
+            fetchedAt: payload.fetchedAt || null,
+            message: payload.message || (payload.errors?.length ? payload.errors.join(" | ") : null),
+            errors: payload.errors || [],
+            items: payload.items || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWatchlistState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente watchlist-kurser.",
+          }));
+        }
+      }
+    }
+
     async function loadIndices() {
       try {
         const response = await fetch(`/api/indices?ts=${Date.now()}`, { cache: "no-store" });
@@ -1283,6 +1465,7 @@ export default function MarketDashboardPrototype() {
     loadFx();
     loadStibor();
     loadNibor();
+    loadWatchlist();
     loadIndices();
     loadYields();
 
@@ -1292,16 +1475,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [watchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [watchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = insiderState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = insiderState.status === "error" || watchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -1336,6 +1519,13 @@ export default function MarketDashboardPrototype() {
   }, [swapsState.status, fxState.status, stiborState.status, niborState.status, yieldState.status, hasError]);
 
   const warningContent = useMemo(() => {
+    if (watchlistState.status === "error") {
+      return {
+        title: "Watchlist feilet",
+        message: watchlistState.message || "Kunne ikke lese aksje-/Bitcoin-kurser.",
+      };
+    }
+
     if (indicesState.status === "error") {
       return {
         title: "Markedsindekser feilet",
@@ -1495,7 +1685,7 @@ export default function MarketDashboardPrototype() {
         </AnimatePresence>
 
         <section className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-stone-800">Quick update</h2>
+          <h2 className="text-sm font-semibold text-stone-800">Renter, valuta & yield</h2>
           <Pill>{niborState.status === "ok" && yieldState.status === "ok" ? "UNION live" : niborState.status === "loading" || yieldState.status === "loading" ? "Henter UNION" : "Delvis/fallback"}</Pill>
         </section>
 
@@ -1605,6 +1795,8 @@ export default function MarketDashboardPrototype() {
             <IndexTile key={index.id} index={index} onClick={() => setSelectedIndex(index)} />
           ))}
 
+          <WatchlistTile watchlistState={watchlistState} onClick={() => setShowWatchlist(true)} />
+
           <Tile
             title="Innsidehandler"
             source="NewsWeb"
@@ -1630,6 +1822,7 @@ export default function MarketDashboardPrototype() {
       {selectedSwap && <SwapOverlay currency={selectedSwap} swapsState={swapsState} onClose={() => setSelectedSwap(null)} />}
       {selectedRate && <RateHistoryOverlay rate={selectedRate} onClose={() => setSelectedRate(null)} />}
       {selectedIndex && <IndexOverlay index={selectedIndex} onClose={() => setSelectedIndex(null)} />}
+      {showWatchlist && <WatchlistOverlay watchlistState={watchlistState} onClose={() => setShowWatchlist(false)} />}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>

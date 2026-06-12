@@ -1,26 +1,30 @@
-# Market Dashboard — VIX text + yield source links
+# Market Dashboard — Watchlist overlay + section heading
 
-Denne pakken bygger videre på VIX visual fix.
+Denne pakken bygger videre på watchlist-title-fix.
 
 ## Endringer
 
-### VIX-forklaring
-VIX-forklaringen er oppdatert til:
+### Hovedoverskrift
+Øverste seksjonsoverskrift er endret:
 
-`USA: Forventet 30-dagers volatilitet i S&P 500, lavere er bedre. (<15 lav uro, 20–30 tydelig usikkerhet, >40 krisetilstand).`
+- `Quick update` → `Renter, valuta & yield`
 
-### Yield-overlay
-I Prime yield-overlayen er kildenavnene nå klikkbare:
+### Watchlist
+Watchlist-tilen er nå klikkbar.
 
-- UNION
-- Newsec
-- Akershus
+Når du trykker på den, åpnes en større overlay med:
+- ticker/navn
+- lenke til respektive Yahoo Finance-side
+- siste kurs
+- 1D
+- 1M
+- 1Å
 
-Lenkene bruker eksisterende `sourceUrl` fra `/api/yields`.
+Alle ticker-/aksjenavn i overlayen åpner Yahoo Finance i ny fane.
 
 ## Test etter deploy
 
-1. Refresh dashboardet med `?v=vix-yield-links`.
-2. Trykk på VIX og sjekk ny tekst.
-3. Trykk på Prime yield.
-4. Trykk på UNION/Newsec/Akershus-navnene og sjekk at kildesidene åpnes i ny fane.
+1. Refresh dashboardet med `?v=watchlist-overlay-heading`.
+2. Sjekk at øverste overskrift er `Renter, valuta & yield`.
+3. Trykk på Watchlist-tilen.
+4. Trykk på hvert navn/ticker og sjekk at Yahoo Finance åpnes.

@@ -1,0 +1,22 @@
+name: Update rates
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs Monday-Friday during business hours.
+    # Updates both NIBOR 3M and STIBOR 3M through the consolidated endpoint.
+    - cron: '40 7,10,13 * * 1-5'
+
+jobs:
+  update-rates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Vercel rate update
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          curl -fsS \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            "https://dash-eight-topaz.vercel.app/api/rates?action=update&type=all"

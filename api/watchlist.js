@@ -286,9 +286,29 @@ function isoDate(date) {
   return date.toISOString().slice(0, 10);
 }
 
-async function fetchYahooHistory(asset, range = "1y") {
+function toUnixSeconds(date) {
+  return Math.floor(date.getTime() / 1000);
+}
+
+function buildYahooChartUrl(asset, range = "1y") {
   const symbol = encodeURIComponent(asset.symbol);
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
+
+  if (range && typeof range === "object") {
+    const startDate = range.startDate instanceof Date ? range.startDate : new Date(range.startDate);
+    const endDate = range.endDate instanceof Date ? range.endDate : new Date(range.endDate || Date.now());
+
+    return `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${toUnixSeconds(startDate)}&period2=${toUnixSeconds(endDate)}&interval=1d`;
+  }
+
+  return `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
+}
+
+function filterHistoryRowsSince(rows, cutoffIso) {
+  return (rows || []).filter((row) => row.date && row.date >= cutoffIso);
+}
+
+async function fetchYahooHistory(asset, range = "1y") {
+  const url = buildYahooChartUrl(asset, range);
 
   const response = await fetch(url, {
     headers: {
@@ -523,18 +543,25 @@ async function updateWatchlist(action, group = "all") {
 
   for (const asset of assets) {
     try {
-      const longCutoff = isoDate(addDays(new Date(), -760));
-      const recentCutoff = isoDate(addDays(new Date(), -35));
+      const now = new Date();
+      const historyStart = addDays(now, -760);
+      const longCutoff = isoDate(historyStart);
+      const recentCutoff = isoDate(addDays(now, -35));
       const longExisting = await getExistingDates(asset.metricKey, longCutoff);
 
-      // For normal scheduled updates: if Supabase does not yet have about a full year of history,
-      // do a one-time 2Y catch-up in the workflow/API update, not on dashboard load.
-      const needsHistoryCatchup = action === "backfill" || !hasEnoughStoredHistory(longExisting, asset.metricKey);
-      const range = needsHistoryCatchup ? "2y" : "1mo";
-      const cutoff = needsHistoryCatchup ? longCutoff : recentCutoff;
+      // If Supabase has less than about a full year for this ticker, force a dated 760-day catch-up.
+      // Using period1/period2 is more reliable than Yahoo's range=2y shortcut for .OL/.ST symbols.
+      const existingSpanDays = Math.round(dateSpanDaysFromSet(longExisting, asset.metricKey));
+      const needsHistoryCatchup = action === "backfill" || existingSpanDays < 365;
 
-      const rows = await fetchYahooHistory(asset, range);
-      const usefulRows = action === "update" && !needsHistoryCatchup ? rows.slice(-3) : rows;
+      const fetchRange = needsHistoryCatchup
+        ? { startDate: historyStart, endDate: addDays(now, 1) }
+        : "1mo";
+
+      const rows = await fetchYahooHistory(asset, fetchRange);
+      const cutoff = needsHistoryCatchup ? longCutoff : recentCutoff;
+      const filteredRows = filterHistoryRowsSince(rows, cutoff);
+      const usefulRows = action === "update" && !needsHistoryCatchup ? filteredRows.slice(-5) : filteredRows;
       const existing = needsHistoryCatchup ? longExisting : await getExistingDates(asset.metricKey, cutoff);
       const metricRows = rowsToMetricRows(asset, usefulRows, fetchedAt, existing);
       const inserted = await insertRows(metricRows);
@@ -543,11 +570,14 @@ async function updateWatchlist(action, group = "all") {
         asset: asset.id,
         metricKey: asset.metricKey,
         symbol: asset.symbol,
-        range,
+        range: needsHistoryCatchup ? "period_760d" : "1mo",
         catchup: needsHistoryCatchup,
-        existingSpanDays: Math.round(dateSpanDaysFromSet(longExisting, asset.metricKey)),
-        fetchedRows: usefulRows.length,
+        existingSpanDays,
+        fetchedRows: rows.length,
+        filteredRows: usefulRows.length,
         savedRows: inserted.length,
+        firstFetchedDate: filteredRows[0]?.date || null,
+        lastFetchedDate: filteredRows[filteredRows.length - 1]?.date || null,
       });
     } catch (error) {
       errors.push(`${asset.name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -572,7 +602,7 @@ async function fetchRows(group = "main") {
     .in("metric_key", keys)
     .eq("status", "ok")
     .order("observed_date", { ascending: false })
-    .limit(12000);
+    .limit(25000);
 
   if (error) throw error;
   return data || [];

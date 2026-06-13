@@ -1,73 +1,72 @@
-# Market Dashboard — rates API consolidation
+# Market Dashboard — Newsfeed tile
 
-Denne pakken rydder opp i API-strukturen ved å samle NIBOR/STIBOR i én serverless function.
+Denne pakken legger til en dynamisk nyhetsfeed.
 
-## Før
+## Ny API-fil
 
-API-mappen hadde 11 filer:
+`api/news.js`
 
-- `nibor.js`
-- `stibor.js`
-- `update-nibor.js`
-- `update-stibor.js`
-- `update-rates.js`
-- pluss øvrige API-er
+API-antall går fra 7 til 8 filer.
 
-## Etter
+## Endepunkter
 
-Disse fem rate-filene er erstattet av én:
+- `/api/news`
+  - leser de 15 mest relevante lagrede artiklene fra Supabase
+- `/api/news?action=update`
+  - henter nye saker, scorer relevans og lagrer i Supabase
 
-- `rates.js`
+## Kilder
 
-Ny API-struktur:
+- DN: RSS
+- E24: RSS
+- Finansavisen: HTML/listing fallback, fordi Finansavisen ikke publiserer RSS
+- Estate: RSS-forsøk + HTML fallback
 
-- `/api/rates?type=nibor`
-- `/api/rates?type=stibor`
-- `/api/rates?action=update&type=nibor`
-- `/api/rates?action=update&type=stibor`
-- `/api/rates?action=update&type=all`
+## Scoring
 
-## API-antall
+Artikler scores automatisk basert på:
+- renter / Norges Bank / inflasjon
+- yield / eiendom / transaksjoner
+- finansiering / bank / obligasjoner
+- børs / aksjer / marked
+- ferskhet
+- kildeboost for Estate og Finansavisen
 
-API-mappen skal nå ha 7 filer:
+Ingen betalt AI/API brukes i første versjon.
 
-- `fx.js`
-- `indices.js`
-- `insider-trades.js`
-- `rates.js`
-- `swaps.js`
-- `watchlist.js`
-- `yields.js`
+## UI
 
-## Internt
+Ny bred tile:
 
-Den gamle rate-logikken er flyttet til `lib/rates/`, slik at koden fortsatt er separert, men ikke teller som Vercel serverless functions.
+`Nyhetsfeed`
+
+Radformat:
+
+`Overskrift | Avis | Publisert`
+
+Overskriften er klikkbar og åpner originalkilden.
 
 ## Workflow
 
-Ny/oppdatert workflow:
+Ny workflow:
 
-- `.github/workflows/update-rates.yml`
+`.github/workflows/update-news.yml`
 
-Den kaller:
+Kjører tre ganger per ukedag:
 
-`/api/rates?action=update&type=all`
+`06:15, 10:15 og 14:15 UTC`
 
-## Test etter deploy
+## Etter deploy
 
-1. `/api/rates?type=nibor`
-2. `/api/rates?type=stibor`
-3. `/api/rates?action=update&type=all`
-4. Refresh dashboard med `?v=rates-consolidated`
+1. Kjør:
+   `/api/news?action=update`
 
-## Viktig ved GitHub-opplasting
+2. Sjekk:
+   `/api/news`
 
-Sørg for at disse gamle API-filene faktisk er slettet fra `api/` i GitHub:
+3. Refresh dashboard:
+   `?v=newsfeed-v1`
 
-- `nibor.js`
-- `stibor.js`
-- `update-nibor.js`
-- `update-stibor.js`
-- `update-rates.js`
+## Viktig
 
-Hvis de blir liggende igjen, teller de fortsatt mot Vercel-grensen.
+Noen artikler kan være bak betalingsmur. Appen viser kun overskrift, kilde, dato og lenke.

@@ -11,6 +11,7 @@ import {
   Clock3,
   ExternalLink,
   LineChart as LineChartIcon,
+  Newspaper,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -161,6 +162,15 @@ const fallbackInsiderTrades = {
   week: [],
 };
 
+const fallbackNewsState = {
+  status: "loading",
+  sourceName: "DN, Finansavisen, E24 og Estate",
+  fetchedAt: null,
+  message: null,
+  errors: [],
+  items: [],
+};
+
 const fallbackIndices = {
   status: "loading",
   sourceName: "Market indices",
@@ -263,6 +273,19 @@ function getFxDecimals(pairName) {
 }
 
 function formatDateTimeShort(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("no-NO", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatArticleDate(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
@@ -772,6 +795,108 @@ function RateHistoryOverlay({ rate, onClose }) {
 
 
 
+
+function NewsFeedTable({ items = [], compact = false }) {
+  const rows = items || [];
+
+  if (!rows.length) {
+    return (
+      <div className="rounded-2xl bg-stone-50 px-3 py-4 text-center text-xs text-stone-400">
+        Ingen nyheter lagret ennå. Kjør /api/news?action=update.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
+      <table className="w-full table-fixed text-left">
+        <thead className="sticky top-0 z-10 bg-stone-50 text-[9px] uppercase tracking-[0.08em] text-stone-400">
+          <tr>
+            <th className="w-[58%] px-2 py-2 font-semibold">Overskrift</th>
+            <th className="w-[18%] px-1 py-2 font-semibold">Avis</th>
+            <th className="w-[24%] px-2 py-2 text-right font-semibold">Publisert</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((article) => (
+            <tr key={article.id || article.url || article.title} className="border-t border-stone-100">
+              <td className={`${compact ? "px-2 py-1.5 text-[10px]" : "px-2 py-2 text-xs"} font-medium text-stone-800`}>
+                <a
+                  href={article.url || "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="line-clamp-2 underline decoration-stone-300 underline-offset-4 active:scale-[0.98]"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {article.title}
+                </a>
+              </td>
+              <td className={`${compact ? "px-1 py-1.5 text-[10px]" : "px-1 py-2 text-xs"} text-stone-500`}>
+                {article.sourceName || "—"}
+              </td>
+              <td className={`${compact ? "px-2 py-1.5 text-[10px]" : "px-2 py-2 text-xs"} text-right tabular-nums text-stone-500`}>
+                {formatArticleDate(article.publishedAt || article.fetchedAt)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function NewsFeedTile({ newsState, onClick }) {
+  const rows = newsState.items || [];
+
+  return (
+    <Tile
+      title="Nyhetsfeed"
+      source="DN / FA / E24 / Estate"
+      accent="blue"
+      icon={<Newspaper size={17} />}
+      size="xlarge"
+      wide
+      onClick={onClick}
+    >
+      <div className="mt-2">
+        <NewsFeedTable items={rows.slice(0, 5)} compact />
+      </div>
+      <div className="mt-2 flex justify-between text-[10px] text-stone-400">
+        <span>{newsState.status === "loading" ? "Leser Supabase" : `Oppdatert: ${formatDateTimeShort(newsState.fetchedAt)}`}</span>
+        <span>{rows.length} artikler</span>
+      </div>
+    </Tile>
+  );
+}
+
+function NewsFeedOverlay({ newsState, onClose }) {
+  const rows = newsState.items || [];
+
+  return (
+    <Overlay
+      title="Nyhetsfeed"
+      subtitle="De mest relevante sakene fra DN, Finansavisen, E24 og Estate."
+      onClose={onClose}
+      footer={
+        <div className="text-xs leading-relaxed text-stone-500">
+          Automatisk rangert på relevans for renter, marked og eiendom. Noen kilder kan ha betalingsmur.
+        </div>
+      }
+    >
+      <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
+        {newsState.status === "loading"
+          ? "Leser nyhetsfeed fra Supabase..."
+          : newsState.status === "empty"
+            ? "Ingen nyheter lagret ennå. Kjør /api/news?action=update."
+            : `Sist oppdatert: ${formatDateTimeShort(newsState.fetchedAt)}. Viser ${rows.length} artikler.`}
+      </div>
+      <div className="max-h-[52vh] overflow-y-auto pr-1">
+        <NewsFeedTable items={rows} />
+      </div>
+    </Overlay>
+  );
+}
+
 function WatchlistTile({ watchlistState, onClick, title = "Watchlist", emptyText = "{emptyText}" }) {
   const rows = watchlistState.items || [];
 
@@ -1210,12 +1335,14 @@ export default function MarketDashboardPrototype() {
   const [showWatchlist, setShowWatchlist] = useState(false);
   const [showRealEstateWatchlist, setShowRealEstateWatchlist] = useState(false);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
+  const [showNewsFeed, setShowNewsFeed] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
   const [indicesState, setIndicesState] = useState(fallbackIndices);
   const [watchlistState, setWatchlistState] = useState(fallbackWatchlist);
   const [realEstateWatchlistState, setRealEstateWatchlistState] = useState(fallbackRealEstateWatchlist);
+  const [newsState, setNewsState] = useState(fallbackNewsState);
   const [swapsState, setSwapsState] = useState(fallbackSwaps);
   const [fxState, setFxState] = useState({
     status: "loading",
@@ -1231,6 +1358,36 @@ export default function MarketDashboardPrototype() {
 
   useEffect(() => {
     let cancelled = false;
+
+    async function loadNews() {
+      try {
+        const response = await fetch(`/api/news?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente nyhetsfeed.");
+        }
+
+        if (!cancelled) {
+          setNewsState({
+            status: payload.status || "empty",
+            sourceName: payload.sourceName || "DN, Finansavisen, E24 og Estate",
+            fetchedAt: payload.fetchedAt || null,
+            message: payload.message || null,
+            errors: payload.errors || [],
+            items: payload.items || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setNewsState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente nyhetsfeed.",
+          }));
+        }
+      }
+    }
 
     async function loadInsiderTrades() {
       try {
@@ -1489,6 +1646,7 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    loadNews();
     loadInsiderTrades();
     loadSwaps();
     loadFx();
@@ -1505,16 +1663,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = newsState.status === "error" || insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -1549,6 +1707,13 @@ export default function MarketDashboardPrototype() {
   }, [swapsState.status, fxState.status, stiborState.status, niborState.status, yieldState.status, hasError]);
 
   const warningContent = useMemo(() => {
+    if (newsState.status === "error") {
+      return {
+        title: "Nyhetsfeed feilet",
+        message: newsState.message || "Kunne ikke lese nyhetsfeed.",
+      };
+    }
+
     if (watchlistState.status === "error") {
       return {
         title: "Watchlist feilet",
@@ -1858,6 +2023,13 @@ export default function MarketDashboardPrototype() {
             </div>
           </Tile>
 
+          <div className="col-span-2 mt-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-stone-800">Nyheter</h3>
+            <span className="text-[11px] text-stone-400">15 mest relevante</span>
+          </div>
+
+          <NewsFeedTile newsState={newsState} onClick={() => setShowNewsFeed(true)} />
+
         </main>
 
         <footer className="mt-5 rounded-[1.5rem] bg-white/65 p-4 text-xs leading-relaxed text-stone-500 ring-1 ring-black/[0.03]">
@@ -1878,6 +2050,7 @@ export default function MarketDashboardPrototype() {
         />
       )}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
+      {showNewsFeed && <NewsFeedOverlay newsState={newsState} onClose={() => setShowNewsFeed(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>
   );

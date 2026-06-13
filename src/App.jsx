@@ -849,9 +849,9 @@ function WatchlistOverlay({ watchlistState, onClose, title = "Watchlist" }) {
           : `Live/delayed: ${formatDateTimeShort(watchlistState.fetchedAt)}. 1M og 1Å beregnes fra lagret historikk i Supabase.`}
       </div>
 
-      <div className="overflow-hidden rounded-3xl border border-stone-100">
+      <div className="max-h-[52vh] overflow-y-auto rounded-3xl border border-stone-100">
         <table className="w-full text-sm">
-          <thead className="bg-stone-50 text-[10px] uppercase tracking-[0.08em] text-stone-400">
+          <thead className="sticky top-0 z-10 bg-stone-50 text-[10px] uppercase tracking-[0.08em] text-stone-400">
             <tr>
               <th className="px-3 py-3 text-left font-semibold">Ticker</th>
               <th className="px-2 py-3 text-right font-semibold">Kurs</th>
@@ -1046,7 +1046,7 @@ function InsiderTradesTable({ trades, compact = false }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-stone-100 bg-white">
       <table className="w-full table-fixed text-left">
-        <thead className="bg-stone-50 text-[9px] uppercase tracking-[0.08em] text-stone-400">
+        <thead className="sticky top-0 z-10 bg-stone-50 text-[9px] uppercase tracking-[0.08em] text-stone-400">
           <tr>
             <th className="w-[13%] px-2 py-2 font-semibold">Dato</th>
             <th className="w-[15%] px-1 py-2 font-semibold">Selskap</th>
@@ -1060,7 +1060,22 @@ function InsiderTradesTable({ trades, compact = false }) {
           {visible.map((trade) => (
             <tr key={trade.id || trade.messageId || trade.messageUrl} className="border-t border-stone-100">
               <td className="px-2 py-1.5 text-[10px] tabular-nums text-stone-500">{formatShortDate(trade.date)}</td>
-              <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">{displayCompany(trade)}</td>
+              <td className="truncate px-1 py-1.5 text-[10px] font-semibold text-stone-800">
+                {!compact && trade.messageUrl ? (
+                  <a
+                    href={trade.messageUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline decoration-stone-300 underline-offset-4 active:scale-[0.98]"
+                    onClick={(event) => event.stopPropagation()}
+                    title={trade.title || "Åpne NewsWeb-melding"}
+                  >
+                    {displayCompany(trade)}
+                  </a>
+                ) : (
+                  displayCompany(trade)
+                )}
+              </td>
               <td className="px-1 py-1.5"><TypeBadge type={trade.type} /></td>
               <td className="truncate px-1 py-1.5 text-[10px] text-stone-500">{trade.personRole || "—"}</td>
               <td className="px-1 py-1.5 text-right text-[10px] tabular-nums text-stone-600">{formatShares(trade.shares)}</td>

@@ -1,33 +1,26 @@
-# Market Dashboard — aksjer section/order fix
+# Market Dashboard — overlay scroll + insider source links
 
-Denne pakken bygger videre på real-estate-watchlist.
+Denne pakken bygger videre på watchlist-supabase-history-strategy.
 
 ## Endringer
 
-### Ny seksjonsoverskrift
-Over Watchlist-tilene er det lagt inn seksjonsoverskrift:
+### Watchlist / Eiendomsaksjer
+Overlay for både `Watchlist` og `Eiendomsaksjer` har nå intern scroll:
 
-`Aksjer`
+- maks høyde ca. 52vh
+- sticky tabellheader
+- fungerer også hvis vi legger til mange flere aksjer senere
 
-### Tile-navn
-Eiendomswatchlisten heter nå:
+### Innsidehandler
+I overlayen for `Innsidehandler` er selskapet i hver rad nå klikkbart når raden har `messageUrl`.
 
-`Eiendomsaksjer`
-
-i stedet for `Watchlist eiendom`.
-
-### Rekkefølge
-Etter seksjonen `Aksjer` ligger tiles i denne rekkefølgen:
-
-1. Watchlist
-2. Eiendomsaksjer
-3. Innsidehandler
+- Klikk på selskap åpner selve NewsWeb-meldingen som er brukt som kilde.
+- I den kompakte tile-visningen er selskap ikke klikkbart, slik at tile-klikket fortsatt fungerer ryddig.
 
 ## Test etter deploy
 
-1. Refresh dashboardet med `?v=aksjer-section-order`.
-2. Sjekk at overskriften `Aksjer` ligger over Watchlist.
-3. Sjekk at rekkefølgen er:
-   - Watchlist
-   - Eiendomsaksjer
-   - Innsidehandler
+1. Refresh med `?v=overlay-scroll-insider-links`.
+2. Trykk `Eiendomsaksjer` og sjekk at overlayen kan scrolles.
+3. Trykk `Watchlist` og sjekk at overlayen fortsatt ser riktig ut.
+4. Trykk `Innsidehandler`.
+5. Klikk på selskap i en rad og sjekk at NewsWeb-meldingen åpnes.

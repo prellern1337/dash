@@ -442,6 +442,29 @@ async function getExistingDates(metricKey, cutoffIso) {
   return new Set((data || []).map((row) => `${row.metric_key}|${row.observed_date}`));
 }
 
+function dateSpanDaysFromSet(existingSet, metricKey) {
+  const prefix = `${metricKey}|`;
+  const dates = Array.from(existingSet || [])
+    .filter((key) => key.startsWith(prefix))
+    .map((key) => key.slice(prefix.length))
+    .filter(Boolean)
+    .sort();
+
+  if (dates.length < 2) return 0;
+
+  const first = new Date(`${dates[0]}T12:00:00Z`).getTime();
+  const last = new Date(`${dates[dates.length - 1]}T12:00:00Z`).getTime();
+
+  if (!Number.isFinite(first) || !Number.isFinite(last)) return 0;
+  return (last - first) / (1000 * 60 * 60 * 24);
+}
+
+function hasEnoughStoredHistory(existingSet, metricKey) {
+  return dateSpanDaysFromSet(existingSet, metricKey) >= 365;
+}
+
+
+
 async function insertRows(rows) {
   if (!rows.length) return [];
 
@@ -494,16 +517,25 @@ function rowsToMetricRows(asset, historyRows, fetchedAt, existingSet = new Set()
 
 async function updateWatchlist(action, group = "all") {
   const fetchedAt = new Date().toISOString();
-  const startDate = action === "backfill" ? addDays(new Date(), -760) : addDays(new Date(), -35);
   const saved = [];
   const errors = [];
   const assets = assetsForGroup(group);
 
   for (const asset of assets) {
     try {
-      const rows = await fetchYahooHistory(asset, action === "backfill" ? "2y" : "1mo");
-      const usefulRows = action === "update" ? rows.slice(-3) : rows;
-      const existing = await getExistingDates(asset.metricKey, isoDate(startDate));
+      const longCutoff = isoDate(addDays(new Date(), -760));
+      const recentCutoff = isoDate(addDays(new Date(), -35));
+      const longExisting = await getExistingDates(asset.metricKey, longCutoff);
+
+      // For normal scheduled updates: if Supabase does not yet have about a full year of history,
+      // do a one-time 2Y catch-up in the workflow/API update, not on dashboard load.
+      const needsHistoryCatchup = action === "backfill" || !hasEnoughStoredHistory(longExisting, asset.metricKey);
+      const range = needsHistoryCatchup ? "2y" : "1mo";
+      const cutoff = needsHistoryCatchup ? longCutoff : recentCutoff;
+
+      const rows = await fetchYahooHistory(asset, range);
+      const usefulRows = action === "update" && !needsHistoryCatchup ? rows.slice(-3) : rows;
+      const existing = needsHistoryCatchup ? longExisting : await getExistingDates(asset.metricKey, cutoff);
       const metricRows = rowsToMetricRows(asset, usefulRows, fetchedAt, existing);
       const inserted = await insertRows(metricRows);
 
@@ -511,6 +543,9 @@ async function updateWatchlist(action, group = "all") {
         asset: asset.id,
         metricKey: asset.metricKey,
         symbol: asset.symbol,
+        range,
+        catchup: needsHistoryCatchup,
+        existingSpanDays: Math.round(dateSpanDaysFromSet(longExisting, asset.metricKey)),
         fetchedRows: usefulRows.length,
         savedRows: inserted.length,
       });
@@ -537,7 +572,7 @@ async function fetchRows(group = "main") {
     .in("metric_key", keys)
     .eq("status", "ok")
     .order("observed_date", { ascending: false })
-    .limit(10000);
+    .limit(12000);
 
   if (error) throw error;
   return data || [];
@@ -607,7 +642,6 @@ function computeChanges(series) {
   let oneYearPoint = valueNearOrBefore(series, addDays(now, -365));
 
   // If exact 1Y point is missing, use earliest point only when it is reasonably close to a full year.
-  // This prevents 1Y from staying blank due to weekends/holidays/newly backfilled data.
   if (!oneYearPoint && series.length >= 2) {
     const earliest = series[0];
     const ageDays = (now.getTime() - new Date(`${earliest.date}T12:00:00Z`).getTime()) / (1000 * 60 * 60 * 24);
@@ -690,7 +724,7 @@ async function buildReadPayload(rows, group = "main") {
     group: normalizeGroup(group),
     fetchedAt: new Date().toISOString(),
     live: true,
-    note: "Watchlist leser siste tilgjengelige Yahoo-quote ved dashboard-load. Historikk/1M/1Y leses fra Supabase.",
+    note: "Watchlist leser siste tilgjengelige Yahoo-quote ved dashboard-load. 1M/1Å beregnes fra Supabase-historikk som fylles automatisk av update/backfill.",
     items,
     errors,
   };

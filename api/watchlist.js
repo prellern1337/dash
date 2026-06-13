@@ -82,12 +82,198 @@ const ASSETS = [
 ];
 
 
+
+const REAL_ESTATE_ASSETS = [
+  // Norway / Oslo
+  {
+    id: "entra",
+    metricKey: "watch_re_entra",
+    name: "Entra",
+    longName: "Entra ASA",
+    symbol: "ENTRA.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/ENTRA.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/entra-entra-xosl",
+  },
+  {
+    id: "selvaag",
+    metricKey: "watch_re_selvaag",
+    name: "Selvaag Bolig",
+    longName: "Selvaag Bolig ASA",
+    symbol: "SBO.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/SBO.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/selvaag-bolig-sbo-xosl",
+  },
+  {
+    id: "kmc",
+    metricKey: "watch_re_kmc",
+    name: "KMC Properties",
+    longName: "KMC Properties ASA",
+    symbol: "KMCP.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/KMCP.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/kmc-properties-kmcp-xosl",
+  },
+  {
+    id: "public_property",
+    metricKey: "watch_re_public_property",
+    name: "PPI",
+    longName: "PPI Public Property Invest",
+    symbol: "PUBLI.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/PUBLI.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/public-property-invest-publi-xosl",
+  },
+  {
+    id: "baltic_sea",
+    metricKey: "watch_re_baltic_sea",
+    name: "Baltic Sea Properties",
+    longName: "Baltic Sea Properties AS",
+    symbol: "BALT.OL",
+    currency: "NOK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/BALT.OL/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/baltic-sea-properties-balt-merk",
+  },
+
+  // Sweden / Nasdaq Stockholm, large listed property companies
+  {
+    id: "balder",
+    metricKey: "watch_re_balder",
+    name: "Balder B",
+    longName: "Fastighets AB Balder",
+    symbol: "BALD-B.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/BALD-B.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/balder-b-bald-b-xsto",
+  },
+  {
+    id: "sagax",
+    metricKey: "watch_re_sagax",
+    name: "Sagax B",
+    longName: "AB Sagax",
+    symbol: "SAGA-B.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/SAGA-B.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/ab-sagax-saga-b-xsto",
+  },
+  {
+    id: "castellum",
+    metricKey: "watch_re_castellum",
+    name: "Castellum",
+    longName: "Castellum AB",
+    symbol: "CAST.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/CAST.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/castellum-cast-xsto",
+  },
+  {
+    id: "wihlborgs",
+    metricKey: "watch_re_wihlborgs",
+    name: "Wihlborgs",
+    longName: "Wihlborgs Fastigheter AB",
+    symbol: "WIHL.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/WIHL.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/wihlborgs-fastigheter-wihl-xsto",
+  },
+  {
+    id: "fabege",
+    metricKey: "watch_re_fabege",
+    name: "Fabege",
+    longName: "Fabege AB",
+    symbol: "FABG.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/FABG.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/fabege-fabg-xsto",
+  },
+  {
+    id: "catena",
+    metricKey: "watch_re_catena",
+    name: "Catena",
+    longName: "Catena AB",
+    symbol: "CATE.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/CATE.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/catena-cate-xsto",
+  },
+  {
+    id: "hufvudstaden",
+    metricKey: "watch_re_hufvudstaden",
+    name: "Hufvudstaden A",
+    longName: "Hufvudstaden AB",
+    symbol: "HUFV-A.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/HUFV-A.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/hufvudstaden-a-hufv-a-xsto",
+  },
+  {
+    id: "wallenstam",
+    metricKey: "watch_re_wallenstam",
+    name: "Wallenstam B",
+    longName: "Wallenstam AB",
+    symbol: "WALL-B.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/WALL-B.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/wallenstam-b-wall-b-xsto",
+  },
+  {
+    id: "pandox",
+    metricKey: "watch_re_pandox",
+    name: "Pandox B",
+    longName: "Pandox AB",
+    symbol: "PNDX-B.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/PNDX-B.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/pandox-b-pndx-b-xsto",
+  },
+  {
+    id: "atrium_ljungberg",
+    metricKey: "watch_re_atrium_ljungberg",
+    name: "Atrium Ljungberg B",
+    longName: "Atrium Ljungberg AB",
+    symbol: "ATRLJ-B.ST",
+    currency: "SEK",
+    sourceName: "Yahoo Finance",
+    sourceUrl: "https://finance.yahoo.com/quote/ATRLJ-B.ST/",
+    nordnetUrl: "https://www.nordnet.no/aksjer/kurser/atrium-ljungberg-b-atrlj-b-xsto",
+  },
+];
+
+
 function displayUrlForAsset(asset) {
   return asset.nordnetUrl || asset.sourceUrl;
 }
 
 function displaySourceForAsset(asset) {
   return asset.nordnetUrl ? "Nordnet" : asset.sourceName;
+}
+
+function normalizeGroup(group) {
+  if (group === "real_estate" || group === "eiendom") return "real_estate";
+  if (group === "all") return "all";
+  return "main";
+}
+
+function assetsForGroup(group) {
+  const normalized = normalizeGroup(group);
+  if (normalized === "real_estate") return REAL_ESTATE_ASSETS;
+  if (normalized === "all") return [...ASSETS, ...REAL_ESTATE_ASSETS];
+  return ASSETS;
 }
 
 function addDays(date, days) {
@@ -306,13 +492,14 @@ function rowsToMetricRows(asset, historyRows, fetchedAt, existingSet = new Set()
   return metricRows;
 }
 
-async function updateWatchlist(action) {
+async function updateWatchlist(action, group = "all") {
   const fetchedAt = new Date().toISOString();
   const startDate = action === "backfill" ? addDays(new Date(), -760) : addDays(new Date(), -35);
   const saved = [];
   const errors = [];
+  const assets = assetsForGroup(group);
 
-  for (const asset of ASSETS) {
+  for (const asset of assets) {
     try {
       const rows = await fetchYahooHistory(asset, action === "backfill" ? "2y" : "1mo");
       const usefulRows = action === "update" ? rows.slice(-3) : rows;
@@ -340,9 +527,9 @@ async function updateWatchlist(action) {
   };
 }
 
-async function fetchRows() {
+async function fetchRows(group = "main") {
   const supabase = getSupabaseAdmin();
-  const keys = ASSETS.map((asset) => asset.metricKey);
+  const keys = assetsForGroup(group).map((asset) => asset.metricKey);
 
   const { data, error } = await supabase
     .from("market_metrics")
@@ -350,7 +537,7 @@ async function fetchRows() {
     .in("metric_key", keys)
     .eq("status", "ok")
     .order("observed_date", { ascending: false })
-    .limit(4000);
+    .limit(10000);
 
   if (error) throw error;
   return data || [];
@@ -417,7 +604,15 @@ function computeChanges(series) {
   const now = new Date(`${latest.date}T12:00:00Z`);
 
   const oneMonthPoint = valueNearOrBefore(series, addDays(now, -30));
-  const oneYearPoint = valueNearOrBefore(series, addDays(now, -365));
+  let oneYearPoint = valueNearOrBefore(series, addDays(now, -365));
+
+  // If exact 1Y point is missing, use earliest point only when it is reasonably close to a full year.
+  // This prevents 1Y from staying blank due to weekends/holidays/newly backfilled data.
+  if (!oneYearPoint && series.length >= 2) {
+    const earliest = series[0];
+    const ageDays = (now.getTime() - new Date(`${earliest.date}T12:00:00Z`).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays >= 330) oneYearPoint = earliest;
+  }
 
   return {
     change1d: previous ? pctChange(latest.value, previous.value) : null,
@@ -426,13 +621,14 @@ function computeChanges(series) {
   };
 }
 
-async function buildReadPayload(rows) {
-  const liveResults = await Promise.allSettled(ASSETS.map((asset) => fetchYahooLiveQuote(asset)));
+async function buildReadPayload(rows, group = "main") {
+  const assets = assetsForGroup(group);
+  const liveResults = await Promise.allSettled(assets.map((asset) => fetchYahooLiveQuote(asset)));
   const liveById = new Map();
   const liveErrors = [];
 
   liveResults.forEach((result, index) => {
-    const asset = ASSETS[index];
+    const asset = assets[index];
 
     if (result.status === "fulfilled") {
       liveById.set(asset.id, result.value);
@@ -441,7 +637,7 @@ async function buildReadPayload(rows) {
     }
   });
 
-  const items = ASSETS.map((asset) => {
+  const items = assets.map((asset) => {
     const storedSeries = buildSeries(rows, asset.metricKey, 760);
     const liveQuote = liveById.get(asset.id) || null;
     const series = mergeLivePoint(storedSeries, liveQuote);
@@ -473,6 +669,9 @@ async function buildReadPayload(rows) {
       liveAt: liveQuote?.liveAt || null,
       isLive: Boolean(liveQuote),
       history: series,
+      historyCount: series.length,
+      firstDate: series[0]?.date || null,
+      lastDate: series[series.length - 1]?.date || null,
       change1d: liveChange1d,
       change1m: changes.change1m,
       change1y: changes.change1y,
@@ -487,7 +686,8 @@ async function buildReadPayload(rows) {
 
   return {
     status: missingErrors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
-    sourceName: "Watchlist",
+    sourceName: group === "real_estate" ? "Watchlist eiendom" : "Watchlist",
+    group: normalizeGroup(group),
     fetchedAt: new Date().toISOString(),
     live: true,
     note: "Watchlist leser siste tilgjengelige Yahoo-quote ved dashboard-load. Historikk/1M/1Y leses fra Supabase.",
@@ -498,24 +698,27 @@ async function buildReadPayload(rows) {
 
 export default async function handler(request, response) {
   try {
-    const action =
-      request.query?.action ||
-      new URL(request.url || "https://local/api/watchlist", "https://local").searchParams.get("action");
+    const url = new URL(request.url || "https://local/api/watchlist", "https://local");
+    const action = request.query?.action || url.searchParams.get("action");
+    const requestedGroup = request.query?.group || url.searchParams.get("group");
+    const readGroup = normalizeGroup(requestedGroup || "main");
+    const updateGroup = normalizeGroup(requestedGroup || "all");
 
     if (action === "update" || action === "backfill") {
-      const result = await updateWatchlist(action);
+      const result = await updateWatchlist(action, updateGroup);
       response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
         metricGroup: "watchlist",
+        group: updateGroup,
         action,
         ...result,
       });
       return;
     }
 
-    const rows = await fetchRows();
+    const rows = await fetchRows(readGroup);
     response.setHeader("Cache-Control", "no-store, max-age=0");
-    response.status(200).json(await buildReadPayload(rows));
+    response.status(200).json(await buildReadPayload(rows, readGroup));
   } catch (error) {
     response.status(500).json({
       status: "error",

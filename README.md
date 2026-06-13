@@ -1,37 +1,33 @@
-# Market Dashboard — top UI cleanup + watchlist 1Y fix
+# Market Dashboard — aksjer section/order fix
 
-Denne pakken bygger videre på watchlist-nordnet-links.
+Denne pakken bygger videre på real-estate-watchlist.
 
 ## Endringer
 
-### Toppen av appen
-- Fjernet teksten under `Marked`:
-  - `Renter, valuta og prime yield samlet i én mobilvisning.`
-- Fjernet den lille statusboksen ved seksjonen `Renter, valuta & yield`, blant annet `UNION live`.
+### Ny seksjonsoverskrift
+Over Watchlist-tilene er det lagt inn seksjonsoverskrift:
 
-### Watchlist 1Å
-1Å viste 0/blankt fordi backfill bare hentet ca. 1 år historikk. Da kan det mangle et godt sammenligningspunkt nøyaktig ett år tilbake, særlig når siste punkt er live/delayed.
+`Aksjer`
 
-Dette er fikset ved at:
-- `/api/watchlist?action=backfill` henter 2 år historikk
-- lesingen bruker inntil 760 dager historikk
-- 1Å beregnes mot nærmeste tilgjengelige datapunkt rundt 1 år tilbake
+### Tile-navn
+Eiendomswatchlisten heter nå:
 
-## Viktig etter deploy
+`Eiendomsaksjer`
 
-Kjør backfill på nytt én gang:
+i stedet for `Watchlist eiendom`.
 
-`/api/watchlist?action=backfill`
+### Rekkefølge
+Etter seksjonen `Aksjer` ligger tiles i denne rekkefølgen:
 
-Da fylles eldre historikk inn i Supabase. Eksisterende rader dupliseres ikke for samme dato.
+1. Watchlist
+2. Eiendomsaksjer
+3. Innsidehandler
 
-## Test
+## Test etter deploy
 
-1. Deploy.
-2. Kjør `/api/watchlist?action=backfill`.
-3. Kjør `/api/watchlist`.
-4. Refresh dashboard med `?v=top-ui-watchlist-1y`.
-5. Sjekk at:
-   - teksten under `Marked` er borte
-   - statusboksen ved `Renter, valuta & yield` er borte
-   - Watchlist 1Å viser reelle tall der det finnes historikk
+1. Refresh dashboardet med `?v=aksjer-section-order`.
+2. Sjekk at overskriften `Aksjer` ligger over Watchlist.
+3. Sjekk at rekkefølgen er:
+   - Watchlist
+   - Eiendomsaksjer
+   - Innsidehandler

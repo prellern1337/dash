@@ -179,6 +179,15 @@ const fallbackWatchlist = {
   items: [],
 };
 
+const fallbackRealEstateWatchlist = {
+  status: "loading",
+  sourceName: "Eiendomsaksjer",
+  fetchedAt: null,
+  message: null,
+  errors: [],
+  items: [],
+};
+
 const formatPercent = (value) => `${value.toFixed(2).replace(".", ",")} %`;
 
 function formatOptionalPercent(value) {
@@ -763,12 +772,12 @@ function RateHistoryOverlay({ rate, onClose }) {
 
 
 
-function WatchlistTile({ watchlistState, onClick }) {
+function WatchlistTile({ watchlistState, onClick, title = "Watchlist", emptyText = "{emptyText}" }) {
   const rows = watchlistState.items || [];
 
   return (
     <Tile
-      title="Watchlist"
+      title={title}
       source="Yahoo"
       accent="slate"
       icon={<BarChart3 size={17} />}
@@ -825,12 +834,12 @@ function WatchlistTile({ watchlistState, onClick }) {
 }
 
 
-function WatchlistOverlay({ watchlistState, onClose }) {
+function WatchlistOverlay({ watchlistState, onClose, title = "Watchlist" }) {
   const rows = watchlistState.items || [];
 
   return (
     <Overlay
-      title="Watchlist"
+      title={title}
       subtitle="Siste Yahoo-kurs/delayed quote, med endring mot historiske sluttkurser."
       onClose={onClose}
     >
@@ -1184,12 +1193,14 @@ export default function MarketDashboardPrototype() {
   const [selectedRate, setSelectedRate] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [showWatchlist, setShowWatchlist] = useState(false);
+  const [showRealEstateWatchlist, setShowRealEstateWatchlist] = useState(false);
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
   const [indicesState, setIndicesState] = useState(fallbackIndices);
   const [watchlistState, setWatchlistState] = useState(fallbackWatchlist);
+  const [realEstateWatchlistState, setRealEstateWatchlistState] = useState(fallbackRealEstateWatchlist);
   const [swapsState, setSwapsState] = useState(fallbackSwaps);
   const [fxState, setFxState] = useState({
     status: "loading",
@@ -1371,9 +1382,10 @@ export default function MarketDashboardPrototype() {
       }
     }
 
-    async function loadWatchlist() {
+    async function loadWatchlist(group = "main", setState = setWatchlistState, fallbackName = "Watchlist") {
       try {
-        const response = await fetch(`/api/watchlist?ts=${Date.now()}`, { cache: "no-store" });
+        const groupQuery = group === "main" ? "" : `&group=${group}`;
+        const response = await fetch(`/api/watchlist?ts=${Date.now()}${groupQuery}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -1381,9 +1393,9 @@ export default function MarketDashboardPrototype() {
         }
 
         if (!cancelled) {
-          setWatchlistState({
+          setState({
             status: payload.status || "empty",
-            sourceName: payload.sourceName || "Watchlist",
+            sourceName: payload.sourceName || fallbackName,
             fetchedAt: payload.fetchedAt || null,
             message: payload.message || (payload.errors?.length ? payload.errors.join(" | ") : null),
             errors: payload.errors || [],
@@ -1392,7 +1404,7 @@ export default function MarketDashboardPrototype() {
         }
       } catch (error) {
         if (!cancelled) {
-          setWatchlistState((current) => ({
+          setState((current) => ({
             ...current,
             status: "error",
             message: error instanceof Error ? error.message : "Kunne ikke hente watchlist-kurser.",
@@ -1468,6 +1480,7 @@ export default function MarketDashboardPrototype() {
     loadStibor();
     loadNibor();
     loadWatchlist();
+    loadWatchlist("real_estate", setRealEstateWatchlistState, "Watchlist eiendom");
     loadIndices();
     loadYields();
 
@@ -1477,16 +1490,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [watchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [watchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = insiderState.status === "error" || watchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -1525,6 +1538,13 @@ export default function MarketDashboardPrototype() {
       return {
         title: "Watchlist feilet",
         message: watchlistState.message || "Kunne ikke lese aksje-/Bitcoin-kurser.",
+      };
+    }
+
+    if (realEstateWatchlistState.status === "error") {
+      return {
+        title: "Eiendomsaksjer feilet",
+        message: realEstateWatchlistState.message || "Kunne ikke lese eiendomsaksjer.",
       };
     }
 
@@ -1796,7 +1816,18 @@ export default function MarketDashboardPrototype() {
             <IndexTile key={index.id} index={index} onClick={() => setSelectedIndex(index)} />
           ))}
 
-          <WatchlistTile watchlistState={watchlistState} onClick={() => setShowWatchlist(true)} />
+                    <div className="col-span-2 mt-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-stone-800">Aksjer</h3>
+          </div>
+
+<WatchlistTile watchlistState={watchlistState} onClick={() => setShowWatchlist(true)} />
+
+          <WatchlistTile
+            watchlistState={realEstateWatchlistState}
+            title="Eiendomsaksjer"
+            emptyText="Ingen eiendomskurser lagret ennå. Kjør /api/watchlist?action=backfill&group=real_estate."
+            onClick={() => setShowRealEstateWatchlist(true)}
+          />
 
           <Tile
             title="Innsidehandler"
@@ -1824,6 +1855,13 @@ export default function MarketDashboardPrototype() {
       {selectedRate && <RateHistoryOverlay rate={selectedRate} onClose={() => setSelectedRate(null)} />}
       {selectedIndex && <IndexOverlay index={selectedIndex} onClose={() => setSelectedIndex(null)} />}
       {showWatchlist && <WatchlistOverlay watchlistState={watchlistState} onClose={() => setShowWatchlist(false)} />}
+      {showRealEstateWatchlist && (
+        <WatchlistOverlay
+          title="Eiendomsaksjer"
+          watchlistState={realEstateWatchlistState}
+          onClose={() => setShowRealEstateWatchlist(false)}
+        />
+      )}
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
     </div>

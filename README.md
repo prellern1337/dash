@@ -1,48 +1,51 @@
-# Market Dashboard — Watchlist domain/workflow verification fix
+# Market Dashboard — Watchlist OK-history catchup fix
 
-Denne pakken bygger videre på watchlist-1y-hard-fix.
+Denne pakken fikser årsaken til at Watchlist fortsatt ikke viste 1Å.
 
-## Hva som var feil
+## Feilen
 
-Workflowen som ble limt inn kjørte:
+`/api/watchlist?action=update` viste:
 
-`https://dash-martin-mogstad-s-projects.vercel.app/api/watchlist?action=update`
+- `existingSpanDays: 730`
+- `catchup: false`
+- `range: "1mo"`
 
-Men appen testes på:
+Samtidig viste `/api/watchlist` bare `firstDate` rundt november 2025.
 
-`https://dash-eight-topaz.vercel.app/`
+Det betyr at catchup-sjekken telte eldre rader i Supabase som appen ikke bruker. Appen leser bare rader med:
 
-Dermed kan workflowen ha kjørt mot en annen/eldre deployment, og Supabase fikk aldri nødvendigvis kjørt den nye 760-dagers catch-up-koden.
+`status = "ok"`
 
-## Endringer
+men `getExistingDates()` telte tidligere alle statuser.
 
-### Workflow
-`.github/workflows/update-watchlist.yml` peker nå til:
+## Fix
 
-`https://dash-eight-topaz.vercel.app/api/watchlist?action=update`
+`getExistingDates()` teller nå bare:
 
-### Verifisering
+`status = "ok"`
+
+Dermed vil `existingOkSpanDays` reflektere samme historikk som appen faktisk bruker.
+
+Hvis OK-historikken er under ca. ett år:
+
+- `catchup: true`
+- `range: "period_760d"`
+- eldre OK-rader lagres i Supabase
+- 1Å kan beregnes
+
+## Verifisering
+
 `/api/watchlist` og `/api/watchlist?action=update` returnerer nå:
 
-`build: "watchlist-1y-hard-fix-domain-2026-06-13"`
-
-Da kan man se direkte om riktig kode faktisk er deployet.
+`build: "watchlist-ok-history-catchup-2026-06-13"`
 
 ## Etter deploy
 
-1. Åpne `/api/watchlist`
-2. Sjekk at responsen inneholder:
-   `build: "watchlist-1y-hard-fix-domain-2026-06-13"`
-
-3. Kjør GitHub Action:
-   `Update watchlist prices`
-
-4. Åpne `/api/watchlist?action=update`
-   og sjekk at responsen for tickere viser:
-   - `range: "period_760d"`
+1. Åpne `/api/watchlist` og sjekk build-markør.
+2. Kjør `/api/watchlist?action=update`.
+3. Nå bør du se:
+   - `existingOkSpanDays` rundt 200, ikke 730
    - `catchup: true`
-   - `firstFetchedDate` langt tilbake
-   - `savedRows` større enn 0 første gang
-
-5. Åpne `/api/watchlist`
-   og sjekk at `firstDate` går langt nok tilbake til 1Å.
+   - `range: "period_760d"`
+   - `savedRows` større enn 0
+4. Åpne `/api/watchlist` på nytt og sjekk at `firstDate` er eldre enn november 2025.

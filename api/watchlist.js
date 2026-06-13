@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
 
-const WATCHLIST_BUILD = "watchlist-1y-hard-fix-domain-2026-06-13";
+const WATCHLIST_BUILD = "watchlist-ok-history-catchup-2026-06-13";
 
 const ASSETS = [
   {
@@ -452,10 +452,13 @@ function mergeLivePoint(series, liveQuote) {
 async function getExistingDates(metricKey, cutoffIso) {
   const supabase = getSupabaseAdmin();
 
+  // Important: only count rows that /api/watchlist will actually use.
+  // The read endpoint filters status = "ok", so catch-up must do the same.
   const { data, error } = await supabase
     .from("market_metrics")
     .select("metric_key,observed_date")
     .eq("metric_key", metricKey)
+    .eq("status", "ok")
     .gte("observed_date", cutoffIso)
     .not("observed_date", "is", null);
 
@@ -574,6 +577,7 @@ async function updateWatchlist(action, group = "all") {
         symbol: asset.symbol,
         range: needsHistoryCatchup ? "period_760d" : "1mo",
         catchup: needsHistoryCatchup,
+        existingOkSpanDays: existingSpanDays,
         existingSpanDays,
         fetchedRows: rows.length,
         filteredRows: usefulRows.length,

@@ -859,7 +859,7 @@ function NewsFeedTile({ newsState, onClick }) {
       onClick={onClick}
     >
       <div className="mt-2">
-        <NewsFeedTable items={rows.slice(0, 5)} compact />
+        <NewsFeedTable items={rows.slice(0, 9)} compact />
       </div>
       <div className="mt-2 flex justify-between text-[10px] text-stone-400">
         <span>{newsState.status === "loading" ? "Leser Supabase" : `Oppdatert: ${formatDateTimeShort(newsState.fetchedAt)}`}</span>
@@ -1985,6 +1985,13 @@ export default function MarketDashboardPrototype() {
             />
           </Tile>
 
+          <div className="col-span-2 mt-2 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-stone-800">Nyheter</h3>
+            <span className="text-[11px] text-stone-400">15 mest relevante</span>
+          </div>
+
+          <NewsFeedTile newsState={newsState} onClick={() => setShowNewsFeed(true)} />
+
           {indicesState.items.length > 0 && (
             <div className="col-span-2 mt-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold text-stone-800">Markedsindekser</h3>
@@ -2022,13 +2029,6 @@ export default function MarketDashboardPrototype() {
               <InsiderTradesTable trades={insiderState.latest.slice(0, 10)} compact />
             </div>
           </Tile>
-
-          <div className="col-span-2 mt-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-stone-800">Nyheter</h3>
-            <span className="text-[11px] text-stone-400">15 mest relevante</span>
-          </div>
-
-          <NewsFeedTile newsState={newsState} onClick={() => setShowNewsFeed(true)} />
 
         </main>
 

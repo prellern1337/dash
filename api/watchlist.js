@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
 
-const WATCHLIST_BUILD = "watchlist-ok-history-catchup-2026-06-13";
+const WATCHLIST_BUILD = "watchlist-per-metric-read-fix-2026-06-13";
 
 const ASSETS = [
   {
@@ -598,20 +598,48 @@ async function updateWatchlist(action, group = "all") {
   };
 }
 
-async function fetchRows(group = "main") {
+async function fetchRowsForMetricKey(metricKey, cutoffIso) {
   const supabase = getSupabaseAdmin();
-  const keys = assetsForGroup(group).map((asset) => asset.metricKey);
 
   const { data, error } = await supabase
     .from("market_metrics")
     .select("*")
-    .in("metric_key", keys)
+    .eq("metric_key", metricKey)
     .eq("status", "ok")
-    .order("observed_date", { ascending: false })
-    .limit(25000);
+    .gte("observed_date", cutoffIso)
+    .not("observed_date", "is", null)
+    .order("observed_date", { ascending: true })
+    .limit(1000);
 
   if (error) throw error;
   return data || [];
+}
+
+async function fetchRows(group = "main") {
+  const assets = assetsForGroup(group);
+  const cutoffIso = addDays(new Date(), -760).toISOString().slice(0, 10);
+  const results = await Promise.allSettled(
+    assets.map((asset) => fetchRowsForMetricKey(asset.metricKey, cutoffIso))
+  );
+
+  const rows = [];
+  const errors = [];
+
+  results.forEach((result, index) => {
+    const asset = assets[index];
+
+    if (result.status === "fulfilled") {
+      rows.push(...result.value);
+    } else {
+      errors.push(`${asset.name}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    }
+  });
+
+  if (errors.length && !rows.length) {
+    throw new Error(errors.join(" | "));
+  }
+
+  return rows;
 }
 
 function rowDate(row) {
@@ -759,6 +787,7 @@ async function buildReadPayload(rows, group = "main") {
     status: missingErrors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: group === "real_estate" ? "Watchlist eiendom" : "Watchlist",
     group: normalizeGroup(group),
+    readMethod: "per_metric_760d",
     fetchedAt: new Date().toISOString(),
     live: true,
     note: "Watchlist leser siste tilgjengelige Yahoo-quote ved dashboard-load. 1M/1Å beregnes fra Supabase-historikk som fylles automatisk av update/backfill.",

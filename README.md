@@ -1,51 +1,40 @@
-# Market Dashboard — Watchlist OK-history catchup fix
+# Market Dashboard — Watchlist per-metric read fix
 
-Denne pakken fikser årsaken til at Watchlist fortsatt ikke viste 1Å.
+Denne pakken fikser den faktiske årsaken til at 1Å fortsatt ikke ble vist.
 
-## Feilen
+## Hva vi nå vet
 
 `/api/watchlist?action=update` viste:
 
-- `existingSpanDays: 730`
+- `existingOkSpanDays: 730`
 - `catchup: false`
 - `range: "1mo"`
 
-Samtidig viste `/api/watchlist` bare `firstDate` rundt november 2025.
+Det betyr at eldre OK-rader faktisk finnes i Supabase.
 
-Det betyr at catchup-sjekken telte eldre rader i Supabase som appen ikke bruker. Appen leser bare rader med:
-
-`status = "ok"`
-
-men `getExistingDates()` telte tidligere alle statuser.
+Samtidig viste `/api/watchlist` bare `firstDate` rundt november 2025. Årsaken er at lesespørringen hentet alle tickere samlet med `.in(metric_key, keys)`, sortert nyeste først. Supabase/PostgREST returnerer i praksis en begrenset mengde rader, så vi fikk bare de nyeste radene totalt — ca. 133 dager per ticker.
 
 ## Fix
 
-`getExistingDates()` teller nå bare:
+`/api/watchlist` henter nå historikk per ticker:
 
-`status = "ok"`
+- én Supabase-query per metric_key
+- `status = "ok"`
+- siste 760 dager
+- opptil 1000 rader per ticker
 
-Dermed vil `existingOkSpanDays` reflektere samme historikk som appen faktisk bruker.
-
-Hvis OK-historikken er under ca. ett år:
-
-- `catchup: true`
-- `range: "period_760d"`
-- eldre OK-rader lagres i Supabase
-- 1Å kan beregnes
+Dermed får hver ticker full historikk og 1Å kan beregnes.
 
 ## Verifisering
 
-`/api/watchlist` og `/api/watchlist?action=update` returnerer nå:
+`/api/watchlist` returnerer nå:
 
-`build: "watchlist-ok-history-catchup-2026-06-13"`
+- `build: "watchlist-per-metric-read-fix-2026-06-13"`
+- `readMethod: "per_metric_760d"`
 
-## Etter deploy
+Etter deploy:
 
-1. Åpne `/api/watchlist` og sjekk build-markør.
-2. Kjør `/api/watchlist?action=update`.
-3. Nå bør du se:
-   - `existingOkSpanDays` rundt 200, ikke 730
-   - `catchup: true`
-   - `range: "period_760d"`
-   - `savedRows` større enn 0
-4. Åpne `/api/watchlist` på nytt og sjekk at `firstDate` er eldre enn november 2025.
+1. Åpne `/api/watchlist`
+2. Sjekk build og readMethod
+3. Sjekk at `firstDate` går ca. 760 dager tilbake for tickere med historikk
+4. Sjekk at `change1y` ikke er null

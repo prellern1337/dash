@@ -1144,7 +1144,7 @@ function YieldOverlay({ onClose, yieldState }) {
             : yieldState.status === "loading"
               ? "Leser prime yield fra Supabase..."
               : yieldState.status === "empty"
-                ? "Ingen prime yield-data lagret ennå. Kjør /api/update-yields."
+                ? "Ingen prime yield-data lagret ennå. Kjør /api/yields?action=update."
                 : `Kunne ikke lese prime yield: ${yieldState.message || "Ukjent feil"}`}
       </div>
 
@@ -1329,7 +1329,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadStibor() {
       try {
-        const response = await fetch(`/api/stibor?ts=${Date.now()}`, { cache: "no-store" });
+        const response = await fetch(`/api/rates?type=stibor&ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -1364,7 +1364,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadNibor() {
       try {
-        const response = await fetch(`/api/nibor?ts=${Date.now()}`, { cache: "no-store" });
+        const response = await fetch(`/api/rates?type=nibor&ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {
@@ -1601,7 +1601,7 @@ export default function MarketDashboardPrototype() {
     if (stiborState.status === "empty") {
       return {
         title: "STIBOR er ikke initialisert",
-        message: "Kjør /api/update-stibor én gang etter deploy. Deretter leser appen sist vellykkede verdi fra Supabase.",
+        message: "Kjør /api/rates?action=update&type=stibor én gang etter deploy. Deretter leser appen sist vellykkede verdi fra Supabase.",
       };
     }
 
@@ -1629,7 +1629,7 @@ export default function MarketDashboardPrototype() {
     if (niborState.status === "empty") {
       return {
         title: "NIBOR er ikke initialisert",
-        message: "Kjør /api/update-nibor én gang etter deploy. Da henter appen 3M NIBOR fra SpareBank 1 Markets og lagrer verdien i Supabase.",
+        message: "Kjør /api/rates?action=update&type=nibor én gang etter deploy. Da henter appen 3M NIBOR fra SpareBank 1 Markets og lagrer verdien i Supabase.",
       };
     }
 

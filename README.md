@@ -1,40 +1,73 @@
-# Market Dashboard — Watchlist per-metric read fix
+# Market Dashboard — rates API consolidation
 
-Denne pakken fikser den faktiske årsaken til at 1Å fortsatt ikke ble vist.
+Denne pakken rydder opp i API-strukturen ved å samle NIBOR/STIBOR i én serverless function.
 
-## Hva vi nå vet
+## Før
 
-`/api/watchlist?action=update` viste:
+API-mappen hadde 11 filer:
 
-- `existingOkSpanDays: 730`
-- `catchup: false`
-- `range: "1mo"`
+- `nibor.js`
+- `stibor.js`
+- `update-nibor.js`
+- `update-stibor.js`
+- `update-rates.js`
+- pluss øvrige API-er
 
-Det betyr at eldre OK-rader faktisk finnes i Supabase.
+## Etter
 
-Samtidig viste `/api/watchlist` bare `firstDate` rundt november 2025. Årsaken er at lesespørringen hentet alle tickere samlet med `.in(metric_key, keys)`, sortert nyeste først. Supabase/PostgREST returnerer i praksis en begrenset mengde rader, så vi fikk bare de nyeste radene totalt — ca. 133 dager per ticker.
+Disse fem rate-filene er erstattet av én:
 
-## Fix
+- `rates.js`
 
-`/api/watchlist` henter nå historikk per ticker:
+Ny API-struktur:
 
-- én Supabase-query per metric_key
-- `status = "ok"`
-- siste 760 dager
-- opptil 1000 rader per ticker
+- `/api/rates?type=nibor`
+- `/api/rates?type=stibor`
+- `/api/rates?action=update&type=nibor`
+- `/api/rates?action=update&type=stibor`
+- `/api/rates?action=update&type=all`
 
-Dermed får hver ticker full historikk og 1Å kan beregnes.
+## API-antall
 
-## Verifisering
+API-mappen skal nå ha 7 filer:
 
-`/api/watchlist` returnerer nå:
+- `fx.js`
+- `indices.js`
+- `insider-trades.js`
+- `rates.js`
+- `swaps.js`
+- `watchlist.js`
+- `yields.js`
 
-- `build: "watchlist-per-metric-read-fix-2026-06-13"`
-- `readMethod: "per_metric_760d"`
+## Internt
 
-Etter deploy:
+Den gamle rate-logikken er flyttet til `lib/rates/`, slik at koden fortsatt er separert, men ikke teller som Vercel serverless functions.
 
-1. Åpne `/api/watchlist`
-2. Sjekk build og readMethod
-3. Sjekk at `firstDate` går ca. 760 dager tilbake for tickere med historikk
-4. Sjekk at `change1y` ikke er null
+## Workflow
+
+Ny/oppdatert workflow:
+
+- `.github/workflows/update-rates.yml`
+
+Den kaller:
+
+`/api/rates?action=update&type=all`
+
+## Test etter deploy
+
+1. `/api/rates?type=nibor`
+2. `/api/rates?type=stibor`
+3. `/api/rates?action=update&type=all`
+4. Refresh dashboard med `?v=rates-consolidated`
+
+## Viktig ved GitHub-opplasting
+
+Sørg for at disse gamle API-filene faktisk er slettet fra `api/` i GitHub:
+
+- `nibor.js`
+- `stibor.js`
+- `update-nibor.js`
+- `update-stibor.js`
+- `update-rates.js`
+
+Hvis de blir liggende igjen, teller de fortsatt mot Vercel-grensen.

@@ -20,4 +20,4 @@ jobs:
         run: |
           curl -fsS \
             -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-            "https://dash-martin-mogstad-s-projects.vercel.app/api/update-swaps"
+            "https://dash-martin-mogstad-s-projects.vercel.app/api/swaps?action=update"

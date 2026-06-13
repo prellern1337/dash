@@ -2,6 +2,8 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
 
+const WATCHLIST_BUILD = "watchlist-1y-hard-fix-domain-2026-06-13";
+
 const ASSETS = [
   {
     id: "gentian",
@@ -749,6 +751,7 @@ async function buildReadPayload(rows, group = "main") {
   const errors = [...missingErrors, ...liveErrors];
 
   return {
+    build: WATCHLIST_BUILD,
     status: missingErrors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: group === "real_estate" ? "Watchlist eiendom" : "Watchlist",
     group: normalizeGroup(group),
@@ -772,6 +775,7 @@ export default async function handler(request, response) {
       const result = await updateWatchlist(action, updateGroup);
       response.setHeader("Cache-Control", "no-store, max-age=0");
       response.status(200).json({
+        build: WATCHLIST_BUILD,
         metricGroup: "watchlist",
         group: updateGroup,
         action,

@@ -1,41 +1,48 @@
-# Market Dashboard — Watchlist 1Y hard fix
+# Market Dashboard — Watchlist domain/workflow verification fix
 
-Denne pakken bygger videre på overlay-scroll-insider-links.
+Denne pakken bygger videre på watchlist-1y-hard-fix.
 
 ## Hva som var feil
 
-`firstDate` lå fortsatt rundt november 2025, så API-et hadde ikke nok historikk til å beregne 1Å.
+Workflowen som ble limt inn kjørte:
 
-Tidligere catch-up brukte Yahoo `range=2y`. For noen Oslo/Stockholm-symboler kan dette være mindre stabilt enn eksplisitte datoer.
+`https://dash-martin-mogstad-s-projects.vercel.app/api/watchlist?action=update`
 
-## Endring
+Men appen testes på:
 
-`/api/watchlist?action=update` bruker nå eksplisitt Yahoo `period1`/`period2` når historikk mangler:
+`https://dash-eight-topaz.vercel.app/`
 
-- henter ca. 760 dager tilbake med konkrete datoer
-- filtrerer og lagrer manglende datoer i Supabase
-- bruker ikke 2Y-henting på vanlig dashboard-load
-- vanlig `/api/watchlist` leser fortsatt kun Supabase-historikk + live/delayed sistekurs
+Dermed kan workflowen ha kjørt mot en annen/eldre deployment, og Supabase fikk aldri nødvendigvis kjørt den nye 760-dagers catch-up-koden.
 
-## Feilsjekk i update-respons
+## Endringer
 
-For hver ticker returneres:
+### Workflow
+`.github/workflows/update-watchlist.yml` peker nå til:
 
-- `catchup`
-- `existingSpanDays`
-- `fetchedRows`
-- `filteredRows`
-- `savedRows`
-- `firstFetchedDate`
-- `lastFetchedDate`
+`https://dash-eight-topaz.vercel.app/api/watchlist?action=update`
+
+### Verifisering
+`/api/watchlist` og `/api/watchlist?action=update` returnerer nå:
+
+`build: "watchlist-1y-hard-fix-domain-2026-06-13"`
+
+Da kan man se direkte om riktig kode faktisk er deployet.
 
 ## Etter deploy
 
-Kjør GitHub Action `Update watchlist prices` én gang, eller vent på schedule.
+1. Åpne `/api/watchlist`
+2. Sjekk at responsen inneholder:
+   `build: "watchlist-1y-hard-fix-domain-2026-06-13"`
 
-Deretter sjekk:
+3. Kjør GitHub Action:
+   `Update watchlist prices`
 
-- `/api/watchlist`
-- `/api/watchlist?group=real_estate`
+4. Åpne `/api/watchlist?action=update`
+   og sjekk at responsen for tickere viser:
+   - `range: "period_760d"`
+   - `catchup: true`
+   - `firstFetchedDate` langt tilbake
+   - `savedRows` større enn 0 første gang
 
-`firstDate` skal da være langt nok tilbake til at 1Å kan beregnes for tickere som har nok børs-/Yahoo-historikk.
+5. Åpne `/api/watchlist`
+   og sjekk at `firstDate` går langt nok tilbake til 1Å.

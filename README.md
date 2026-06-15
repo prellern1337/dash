@@ -1,57 +1,55 @@
-# Market Dashboard — SEB swaps intraday schedule + previous-close change
+# Market Dashboard — update cadence and FX cache fix
 
-Denne pakken justerer SWAP-oppsettet.
+Denne pakken samler oppdateringsoppsettet litt bedre.
 
-## Workflow
+## Endringer
 
-`update-swaps.yml` er oppdatert til å kjøre fire ganger per ukedag:
+### NIBOR / STIBOR
+`update-rates.yml` kjører nå fire ganger per ukedag:
 
 `07:00, 10:00, 13:00 og 15:00 UTC`
 
-Dette tilsvarer omtrent:
+Omtrent:
 
 - 09:00, 12:00, 15:00 og 17:00 norsk sommertid
 - 08:00, 11:00, 14:00 og 16:00 norsk vintertid
 
-Workflowen peker nå til stabil app-URL:
+### Newsfeed
+`update-news.yml` kjører nå fire ganger per ukedag:
 
-`https://dash-eight-topaz.vercel.app/api/swaps?action=update`
+`07:05, 10:05, 13:05 og 15:05 UTC`
 
-## SWAP tile-endring
+### Valuta
+`/api/fx` henter fortsatt direkte fra Norges Bank, men responsen er nå satt til:
 
-SWAP-tilene viser nå rød/grønn pil og bps-endring for hver tenor:
+`Cache-Control: no-store`
 
-- Rød pil opp = renten er høyere enn closing forrige arbeidsdag
-- Grønn pil ned = renten er lavere enn closing forrige arbeidsdag
+og appen kaller:
 
-Sammenligningen gjøres slik:
+`/api/fx?ts=...`
 
-`siste observasjon - siste daglige closing før dagens observasjonsdato`
+Dette reduserer risikoen for at appen viser en cachet valutakurs.
 
-## API
+### Domener
+Workflows er samkjørt mot stabil app-URL:
 
-`/api/swaps` returnerer nå også:
+`https://dash-eight-topaz.vercel.app`
 
-`data.NOK.changes`
-`data.SEK.changes`
+## Viktig
 
-med blant annet:
+Valuta/Norges Bank kan fortsatt vise forrige arbeidsdag tidlig på dagen dersom Norges Bank ikke har publisert dagens observasjon ennå.
 
-- `bps`
-- `previousClose`
-- `previousDate`
-- `latestValue`
-- `latestDate`
+## Etter deploy
 
-## Test etter deploy
+Kjør gjerne disse manuelt én gang fra Actions:
 
-1. Kjør:
-   `/api/swaps?action=update`
+- Update rates
+- Update newsfeed
+- Update SEB swaps
 
-2. Sjekk:
-   `/api/swaps`
+Sjekk deretter:
 
-3. Refresh dashboard:
-   `?v=swaps-intraday-change`
-
-4. Sjekk at SWAP NOK/SEK viser rød/grønn pil/bp i radene.
+- `/api/rates?type=nibor`
+- `/api/rates?type=stibor`
+- `/api/news`
+- `/api/fx`

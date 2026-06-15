@@ -1477,7 +1477,7 @@ export default function MarketDashboardPrototype() {
 
     async function loadFx() {
       try {
-        const response = await fetch("/api/fx");
+        const response = await fetch(`/api/fx?ts=${Date.now()}`, { cache: "no-store" });
         const payload = await response.json();
 
         if (!response.ok || payload.status === "error") {

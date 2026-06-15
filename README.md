@@ -1,18 +1,42 @@
-# Market Dashboard — SWAP mobile layout fix
+# Market Dashboard — Watchlist hype tickers + index zero fix
 
-Denne pakken gjør SWAP-tilene mer kompakte på mobil.
+## Watchlist
 
-## Endringer
+Følgende er lagt til i eksisterende `Watchlist`:
 
-- Radetiketter endret fra `3Y swap`, `5Y swap`, `10Y swap` til `3Y`, `5Y`, `10Y`.
-- Prosentverdien er satt til `whitespace-nowrap`, slik at `4,72 %` ikke brytes over to linjer.
-- bp-endringen er gjort mer kompakt, for eksempel `-7bp`.
-- Mindre tekst og litt strammere avstand i RateStack.
+- SpaceX (`SPCX`)
+- Tesla (`TSLA`)
+- Nvidia (`NVDA`)
+- Microsoft (`MSFT`)
+- Alphabet (`GOOGL`)
+- Coinbase (`COIN`)
 
-## Test etter deploy
+Dette er lagt inn i samme `api/watchlist.js`, altså ingen ny tile og ingen ny API-fil.
 
-Refresh med:
+## Indeksgrafer: 0-verdier
 
-`?v=swap-mobile-layout`
+`api/indices.js` er gjort robust mot 0-observasjoner.
 
-Sjekk SWAP NOK og SWAP SEK på mobil.
+### Problem
+Noen indekser, f.eks. OSEBX/VIX, kunne få `0` i historikken når kilden ikke hadde publisert faktisk verdi for en dag. Da falt overlay-grafen til null.
+
+### Fix
+- Nye Yahoo-observasjoner med `close <= 0` ignoreres.
+- Ved innlegging av historikk: hvis en rad har `0`/mangler verdi, brukes forrige gyldige observasjon.
+- Ved lesing fra Supabase: eksisterende gamle `0`-verdier forward-filles i API-responsen, slik at grafen ikke faller til null selv om gamle 0-rader ligger i databasen.
+
+## Etter deploy
+
+Kjør gjerne:
+
+- `/api/watchlist?action=update`
+- `/api/indices?action=update`
+
+Sjekk deretter:
+
+- `/api/watchlist`
+- `/api/indices`
+
+For indekser skal build være:
+
+`indices-zero-forwardfill-v1-2026-06-15`

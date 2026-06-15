@@ -160,6 +160,41 @@ function parseNumber(value) {
       .replace(/[^\d.-]/g, "")
   );
 }
+function isValidMarketValue(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0;
+}
+
+function forwardFillMissingSeriesValues(series) {
+  const result = [];
+  let lastValid = null;
+
+  for (const point of series || []) {
+    const value = Number(point.value);
+
+    if (isValidMarketValue(value)) {
+      lastValid = value;
+      result.push({
+        ...point,
+        value,
+        isForwardFilled: false,
+      });
+      continue;
+    }
+
+    if (lastValid !== null) {
+      result.push({
+        ...point,
+        value: lastValid,
+        isForwardFilled: true,
+      });
+    }
+  }
+
+  return result;
+}
+
+
 
 function stooqSymbolForUrl(symbol) {
   return encodeURIComponent(symbol.toLowerCase());
@@ -262,7 +297,7 @@ async function fetchYahooHistory(index, range = "1y") {
       sourceDocument: `${index.name} daily close`,
       rawSource: "yahoo_chart",
     }))
-    .filter((row) => row.date && Number.isFinite(Number(row.close)))
+    .filter((row) => row.date && isValidMarketValue(row.close))
     .map((row) => ({
       ...row,
       open: Number.isFinite(Number(row.open)) ? Number(row.open) : null,
@@ -467,8 +502,21 @@ async function getExistingDates(metricKey, cutoffIso) {
 
 function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()) {
   const metricRows = [];
+  let lastValidClose = null;
 
   for (const row of historyRows) {
+    const rawClose = Number(row.close);
+
+    if (isValidMarketValue(rawClose)) {
+      lastValidClose = rawClose;
+    } else if (lastValidClose !== null) {
+      // If source sends 0/missing for a non-published day, store previous valid close.
+      row = { ...row, close: lastValidClose, forwardFilled: true };
+    } else {
+      // Never insert leading zero/invalid values.
+      continue;
+    }
+
     const key = `${index.metricKey}|${row.date}`;
     if (existingSet.has(key)) continue;
 
@@ -494,6 +542,7 @@ function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()
         volume: row.volume,
         provider: row.rawSource,
         symbol: index.symbol,
+        forwardFilled: Boolean(row.forwardFilled),
       },
     });
   }
@@ -601,9 +650,13 @@ function buildSeries(rows, metricKey, days = 370) {
   const byDate = new Map();
   for (const row of relevant) byDate.set(row.date, row.value);
 
-  return Array.from(byDate.entries())
+  const series = Array.from(byDate.entries())
     .map(([date, value]) => ({ date, value }))
     .sort((a, b) => a.date.localeCompare(b.date));
+
+  // Existing historic 0-values in Supabase should not pull graphs to zero.
+  // Use previous valid observation instead.
+  return forwardFillMissingSeriesValues(series);
 }
 
 function pctChange(current, previous) {
@@ -673,10 +726,10 @@ function buildReadPayload(rows) {
     };
   });
 
-  const errors = items.filter((item) => !Number.isFinite(Number(item.value))).map((item) => `${item.name}: mangler verdi`);
+  const errors = items.filter((item) => !isValidMarketValue(item.value)).map((item) => `${item.name}: mangler verdi`);
 
   return {
-    build: "indices-dnb-funds-v1-2026-06-15",
+    build: "indices-zero-forwardfill-v1-2026-06-15",
     status: errors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: "Market indices + DNB funds",
     readMethod: "per_metric_370d",

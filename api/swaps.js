@@ -12,8 +12,16 @@ const WANTED = [
 
 function emptyData() {
   return {
-    NOK: { currency: "NOK", rates: { "3 Yr": null, "5 Yr": null, "10 Yr": null } },
-    SEK: { currency: "SEK", rates: { "3 Yr": null, "5 Yr": null, "10 Yr": null } },
+    NOK: {
+      currency: "NOK",
+      rates: { "3 Yr": null, "5 Yr": null, "10 Yr": null },
+      changes: { "3 Yr": null, "5 Yr": null, "10 Yr": null },
+    },
+    SEK: {
+      currency: "SEK",
+      rates: { "3 Yr": null, "5 Yr": null, "10 Yr": null },
+      changes: { "3 Yr": null, "5 Yr": null, "10 Yr": null },
+    },
   };
 }
 
@@ -65,6 +73,38 @@ function buildDailySeries(rows, key, days = 60) {
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+
+function latestDateForRow(row) {
+  return dateKey(row?.observed_date || row?.fetched_at);
+}
+
+function previousCloseChange(rows, item, latestRow) {
+  if (!latestRow || !Number.isFinite(Number(latestRow.value))) return null;
+
+  const latestDate = latestDateForRow(latestRow);
+  const latestValue = Number(latestRow.value);
+  const series = buildDailySeries(rows, item.key, 90);
+
+  if (!series.length || !latestDate) return null;
+
+  const previous = [...series].reverse().find((point) => point.date < latestDate);
+
+  if (!previous || !Number.isFinite(Number(previous.value))) return null;
+
+  const change = latestValue - Number(previous.value);
+  const bps = change * 100;
+
+  return {
+    value: Number(change.toFixed(4)),
+    bps: Number(bps.toFixed(1)),
+    direction: change > 0 ? "up" : change < 0 ? "down" : "flat",
+    previousClose: Number(previous.value),
+    previousDate: previous.date,
+    latestValue,
+    latestDate,
+  };
+}
+
 function buildHistory(rows) {
   return {
     NOK: {
@@ -114,6 +154,7 @@ async function readSwapsHandler(request, response) {
       }
 
       data[item.currency].rates[item.tenor] = Number(good.value);
+      data[item.currency].changes[item.tenor] = previousCloseChange(rows, item, good);
       data[item.currency].fetchedAt = good.fetched_at;
       data[item.currency].sourceName = good.source_name;
       data[item.currency].sourceUrl = good.source_url;

@@ -1,36 +1,27 @@
-# Market Dashboard — DNB funds daily close update
+# Market Dashboard — indices syntax fix
 
-Denne pakken bygger videre på DNB-funds-v1, men justerer oppdateringsfrekvensen.
+Denne pakken fikser at alle indekser forsvant etter DNB-fond-endringen.
 
-## Endring
+## Feil
 
-DNB-fond oppdateres nå én gang per ukedag, ikke fire ganger daglig.
+`api/indices.js` hadde en syntaksfeil i `INDICES`-listen:
 
-Workflow:
+`},,`
 
-`.github/workflows/update-indices.yml`
+etter VIX og før DNB-fondene.
 
-Cron:
+Det gjorde at hele `/api/indices` krasjet, og dermed forsvant alle indeks-tiles.
 
-`15 16 * * 1-5`
+## Fix
 
-Det betyr omtrent:
+Dobbel-kommaen er fjernet.
 
-- 18:15 norsk sommertid
-- 17:15 norsk vintertid
+## Sjekket
 
-Dette er valgt fordi fonds-NAV/kurs normalt publiseres én gang per dag. Flere daglige kjøringer gir derfor normalt ikke flere datapunkter.
+`node --check api/indices.js` er kjørt og passerer.
 
 ## Etter deploy
 
-Kjør eventuelt workflowen manuelt én gang:
-
-`Update market indices`
-
-eller åpne:
-
-`/api/indices?action=update`
-
-Deretter sjekk:
-
-`/api/indices`
+1. Sjekk `/api/indices`
+2. Sjekk at markedsindekser + DNB-fond vises igjen
+3. Kjør eventuelt `/api/indices?action=update`

@@ -97,7 +97,7 @@ const INDICES = [
     yahooSymbol: "^VIX",
     sourceName: "Stooq",
     sourceUrl: "https://stooq.com/q/d/?s=%5Evix",
-  },,
+  },
   {
     id: "dnb_teknologi_a",
     metricKey: "fund_dnb_teknologi_a",

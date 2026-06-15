@@ -1,55 +1,18 @@
-# Market Dashboard — update cadence and FX cache fix
+# Market Dashboard — SWAP mobile layout fix
 
-Denne pakken samler oppdateringsoppsettet litt bedre.
+Denne pakken gjør SWAP-tilene mer kompakte på mobil.
 
 ## Endringer
 
-### NIBOR / STIBOR
-`update-rates.yml` kjører nå fire ganger per ukedag:
+- Radetiketter endret fra `3Y swap`, `5Y swap`, `10Y swap` til `3Y`, `5Y`, `10Y`.
+- Prosentverdien er satt til `whitespace-nowrap`, slik at `4,72 %` ikke brytes over to linjer.
+- bp-endringen er gjort mer kompakt, for eksempel `-7bp`.
+- Mindre tekst og litt strammere avstand i RateStack.
 
-`07:00, 10:00, 13:00 og 15:00 UTC`
+## Test etter deploy
 
-Omtrent:
+Refresh med:
 
-- 09:00, 12:00, 15:00 og 17:00 norsk sommertid
-- 08:00, 11:00, 14:00 og 16:00 norsk vintertid
+`?v=swap-mobile-layout`
 
-### Newsfeed
-`update-news.yml` kjører nå fire ganger per ukedag:
-
-`07:05, 10:05, 13:05 og 15:05 UTC`
-
-### Valuta
-`/api/fx` henter fortsatt direkte fra Norges Bank, men responsen er nå satt til:
-
-`Cache-Control: no-store`
-
-og appen kaller:
-
-`/api/fx?ts=...`
-
-Dette reduserer risikoen for at appen viser en cachet valutakurs.
-
-### Domener
-Workflows er samkjørt mot stabil app-URL:
-
-`https://dash-eight-topaz.vercel.app`
-
-## Viktig
-
-Valuta/Norges Bank kan fortsatt vise forrige arbeidsdag tidlig på dagen dersom Norges Bank ikke har publisert dagens observasjon ennå.
-
-## Etter deploy
-
-Kjør gjerne disse manuelt én gang fra Actions:
-
-- Update rates
-- Update newsfeed
-- Update SEB swaps
-
-Sjekk deretter:
-
-- `/api/rates?type=nibor`
-- `/api/rates?type=stibor`
-- `/api/news`
-- `/api/fx`
+Sjekk SWAP NOK og SWAP SEK på mobil.

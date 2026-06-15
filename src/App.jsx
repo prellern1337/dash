@@ -475,6 +475,13 @@ function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, 
 }
 
 
+function formatSwapBps(value) {
+  const bps = Number(value);
+  if (!Number.isFinite(bps)) return "";
+  const decimals = Math.abs(bps) >= 10 || Number.isInteger(bps) ? 0 : 1;
+  return `${bps > 0 ? "+" : ""}${formatNumber(bps, decimals)}bp`;
+}
+
 function SwapChangeBadge({ changeBps }) {
   if (!Number.isFinite(Number(changeBps))) return null;
 
@@ -484,10 +491,10 @@ function SwapChangeBadge({ changeBps }) {
   const className = isUp ? "text-rose-600" : isDown ? "text-emerald-600" : "text-stone-400";
 
   return (
-    <span className={`ml-1 inline-flex items-center gap-0.5 text-[10px] font-semibold tabular-nums ${className}`}>
-      {isUp && <ArrowUpRight size={12} />}
-      {isDown && <ArrowDownRight size={12} />}
-      {!isUp && !isDown ? "0 bp" : `${isUp ? "+" : ""}${formatNumber(bps, 1)} bp`}
+    <span className={`ml-1 inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[9px] font-semibold tabular-nums ${className}`}>
+      {isUp && <ArrowUpRight size={10} />}
+      {isDown && <ArrowDownRight size={10} />}
+      {!isUp && !isDown ? "0bp" : formatSwapBps(bps)}
     </span>
   );
 }
@@ -496,10 +503,10 @@ function RateStack({ rows }) {
   return (
     <div className="mt-2 space-y-1.5">
       {rows.map((row) => (
-        <div key={row.label} className="flex items-center justify-between rounded-xl bg-stone-50 px-2.5 py-1.5">
-          <span className="text-[12px] font-medium text-stone-500">{row.label}</span>
-          <span className="flex items-center text-[15px] font-semibold tabular-nums tracking-[-0.03em] text-stone-950">
-            {row.value}
+        <div key={row.label} className="flex items-center justify-between gap-1 rounded-xl bg-stone-50 px-2 py-1.5">
+          <span className="shrink-0 text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
+          <span className="flex min-w-0 items-center justify-end text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
+            <span className="whitespace-nowrap">{row.value}</span>
             <SwapChangeBadge changeBps={row.changeBps} />
           </span>
         </div>
@@ -1918,9 +1925,9 @@ export default function MarketDashboardPrototype() {
           <Tile title="SWAP NOK" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
             <RateStack
               rows={[
-                { label: "3Y swap", value: formatOptionalPercent(swapsState.data.NOK.rates["3 Yr"]), changeBps: swapsState.data.NOK.changes?.["3 Yr"]?.bps },
-                { label: "5Y swap", value: formatOptionalPercent(swapsState.data.NOK.rates["5 Yr"]), changeBps: swapsState.data.NOK.changes?.["5 Yr"]?.bps },
-                { label: "10Y swap", value: formatOptionalPercent(swapsState.data.NOK.rates["10 Yr"]), changeBps: swapsState.data.NOK.changes?.["10 Yr"]?.bps },
+                { label: "3Y", value: formatOptionalPercent(swapsState.data.NOK.rates["3 Yr"]), changeBps: swapsState.data.NOK.changes?.["3 Yr"]?.bps },
+                { label: "5Y", value: formatOptionalPercent(swapsState.data.NOK.rates["5 Yr"]), changeBps: swapsState.data.NOK.changes?.["5 Yr"]?.bps },
+                { label: "10Y", value: formatOptionalPercent(swapsState.data.NOK.rates["10 Yr"]), changeBps: swapsState.data.NOK.changes?.["10 Yr"]?.bps },
               ]}
             />
           </Tile>
@@ -1928,9 +1935,9 @@ export default function MarketDashboardPrototype() {
           <Tile title="SWAP SEK" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("SEK")}>
             <RateStack
               rows={[
-                { label: "3Y swap", value: formatOptionalPercent(swapsState.data.SEK.rates["3 Yr"]), changeBps: swapsState.data.SEK.changes?.["3 Yr"]?.bps },
-                { label: "5Y swap", value: formatOptionalPercent(swapsState.data.SEK.rates["5 Yr"]), changeBps: swapsState.data.SEK.changes?.["5 Yr"]?.bps },
-                { label: "10Y swap", value: formatOptionalPercent(swapsState.data.SEK.rates["10 Yr"]), changeBps: swapsState.data.SEK.changes?.["10 Yr"]?.bps },
+                { label: "3Y", value: formatOptionalPercent(swapsState.data.SEK.rates["3 Yr"]), changeBps: swapsState.data.SEK.changes?.["3 Yr"]?.bps },
+                { label: "5Y", value: formatOptionalPercent(swapsState.data.SEK.rates["5 Yr"]), changeBps: swapsState.data.SEK.changes?.["5 Yr"]?.bps },
+                { label: "10Y", value: formatOptionalPercent(swapsState.data.SEK.rates["10 Yr"]), changeBps: swapsState.data.SEK.changes?.["10 Yr"]?.bps },
               ]}
             />
           </Tile>

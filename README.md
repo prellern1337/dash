@@ -1,32 +1,36 @@
-# Market Dashboard — newsfeed position/count tweak
+# Market Dashboard — DNB funds daily close update
 
-Denne pakken bygger videre på newsfeed-v1.
+Denne pakken bygger videre på DNB-funds-v1, men justerer oppdateringsfrekvensen.
 
-## Endringer
+## Endring
 
-### Plassering
-Nyhetsseksjonen er flyttet opp.
+DNB-fond oppdateres nå én gang per ukedag, ikke fire ganger daglig.
 
-Ny rekkefølge:
+Workflow:
 
-1. Renter, valuta & yield
-2. Nyheter / Nyhetsfeed
-3. Markedsindekser
-4. Aksjer
-5. Innsidehandler
+`.github/workflows/update-indices.yml`
 
-### Tile-visning
-Nyhetsfeed-tilen viser nå inntil 9 artikler i stedet for 5.
+Cron:
 
-Overlay er uendret og viser fortsatt full liste.
+`15 16 * * 1-5`
 
-## Test etter deploy
+Det betyr omtrent:
 
-Refresh dashboardet med:
+- 18:15 norsk sommertid
+- 17:15 norsk vintertid
 
-`?v=newsfeed-position-count`
+Dette er valgt fordi fonds-NAV/kurs normalt publiseres én gang per dag. Flere daglige kjøringer gir derfor normalt ikke flere datapunkter.
 
-Sjekk at:
-- `Nyheter` kommer rett etter `Renter, valuta & yield`
-- Nyhetsfeed-tilen viser flere artikler
-- Overlay fortsatt fungerer som før
+## Etter deploy
+
+Kjør eventuelt workflowen manuelt én gang:
+
+`Update market indices`
+
+eller åpne:
+
+`/api/indices?action=update`
+
+Deretter sjekk:
+
+`/api/indices`

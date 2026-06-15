@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
+import { DNB_FUND_HISTORY } from "../lib/dnb-fund-history.js";
 
 export const config = { maxDuration: 60 };
 
@@ -96,7 +97,43 @@ const INDICES = [
     yahooSymbol: "^VIX",
     sourceName: "Stooq",
     sourceUrl: "https://stooq.com/q/d/?s=%5Evix",
+  },,
+  {
+    id: "dnb_teknologi_a",
+    metricKey: "fund_dnb_teknologi_a",
+    name: "DNB Tek A",
+    longName: "DNB Teknologi A",
+    description: "DNB: Aktivt forvaltet aksjefond innen teknologi, media og telekommunikasjon.",
+    provider: "dnb_fund",
+    isin: "NO0010337678",
+    unit: "NOK",
+    sourceName: "DNB",
+    sourceUrl: "https://www.dnb.no/sparing/fond/fond-liste/d/dnb-teknologi-a-NO0010337678",
   },
+  {
+    id: "dnb_global_indeks_a",
+    metricKey: "fund_dnb_global_indeks_a",
+    name: "DNB Global Indeks",
+    longName: "DNB Global Indeks A",
+    description: "DNB: Indeksnært globalt aksjefond som søker å følge MSCI World Index Net.",
+    provider: "dnb_fund",
+    isin: "NO0010582984",
+    unit: "NOK",
+    sourceName: "DNB",
+    sourceUrl: "https://www.dnb.no/sparing/fond/fond-liste/d/dnb-global-indeks-a-NO0010582984",
+  },
+  {
+    id: "dnb_smb_a",
+    metricKey: "fund_dnb_smb_a",
+    name: "DNB SMB",
+    longName: "DNB SMB A",
+    description: "DNB: Aktivt forvaltet aksjefond med små og mellomstore selskaper, hovedsakelig på Oslo Børs.",
+    provider: "dnb_fund",
+    isin: "NO0010337819",
+    unit: "NOK",
+    sourceName: "DNB",
+    sourceUrl: "https://www.dnb.no/sparing/fond/fond-liste/d/dnb-smb-a-NO0010337819",
+  }
 ];
 
 function yyyymmdd(date) {
@@ -240,7 +277,147 @@ async function fetchYahooHistory(index, range = "1y") {
   return rows;
 }
 
+function norwegianMonthToNumber(monthName) {
+  const map = {
+    jan: "01", januar: "01",
+    feb: "02", februar: "02",
+    mar: "03", mars: "03",
+    apr: "04", april: "04",
+    mai: "05",
+    jun: "06", juni: "06",
+    jul: "07", juli: "07",
+    aug: "08", august: "08",
+    sep: "09", sept: "09", september: "09",
+    okt: "10", oktober: "10",
+    nov: "11", november: "11",
+    des: "12", desember: "12",
+  };
+
+  return map[String(monthName || "").toLowerCase().replace(".", "")] || null;
+}
+
+function normaliseDnbText(html) {
+  return String(html || "")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&#xE5;/g, "å")
+    .replace(/&#xE6;/g, "æ")
+    .replace(/&#xF8;/g, "ø")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function parseDnbNavNumber(value) {
+  if (typeof value !== "string") return Number.NaN;
+
+  return Number.parseFloat(
+    value
+      .replace(/\s/g, "")
+      .replace(/\u00a0/g, "")
+      .replace(",", ".")
+      .replace(/[^\d.-]/g, "")
+  );
+}
+
+function parseDnbFundObservedDate(day, monthName, year) {
+  const month = norwegianMonthToNumber(monthName);
+  if (!month) return null;
+  return `${year}-${month}-${String(day).padStart(2, "0")}`;
+}
+
+function extractDnbFundNav(html, fund) {
+  const text = normaliseDnbText(html);
+
+  const patterns = [
+    /NAV\/Kurs\s+([\d\s.,]+)\s*kroner\s+(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/i,
+    /NAV\s*\/\s*Kurs[\s\S]{0,120}?([\d\s.,]+)\s*kroner[\s\S]{0,80}?(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/i,
+  ];
+
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match) continue;
+
+    const value = parseDnbNavNumber(match[1]);
+    const observedDate = parseDnbFundObservedDate(match[2], match[3], match[4]);
+
+    if (Number.isFinite(value) && value > 0 && observedDate) {
+      return {
+        date: observedDate,
+        close: value,
+        open: null,
+        high: null,
+        low: null,
+        volume: null,
+        sourceName: fund.sourceName,
+        sourceUrl: fund.sourceUrl,
+        sourceDocument: `${fund.name} NAV/Kurs`,
+        rawSource: "dnb_fund_page",
+      };
+    }
+  }
+
+  throw new Error(`Fant ikke NAV/Kurs på DNB-siden for ${fund.name}.`);
+}
+
+async function fetchDnbFundCurrent(fund) {
+  const response = await fetch(fund.sourceUrl, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml,*/*",
+      "Accept-Language": "nb-NO,nb;q=0.9,en-US;q=0.8,en;q=0.7",
+      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!response.ok) throw new Error(`DNB svarte med ${response.status} for ${fund.name}.`);
+
+  const html = await response.text();
+  return extractDnbFundNav(html, fund);
+}
+
+function seededDnbFundHistory(fund) {
+  return DNB_FUND_HISTORY
+    .filter((row) => row.id === fund.id)
+    .map((row) => ({
+      date: row.date,
+      open: null,
+      high: null,
+      low: null,
+      close: Number(row.close),
+      volume: null,
+      sourceName: "InFront / DNB",
+      sourceUrl: fund.sourceUrl,
+      sourceDocument: "DNB fond historikk.xlsx",
+      rawSource: "uploaded_excel_seed",
+    }))
+    .filter((row) => row.date && Number.isFinite(row.close));
+}
+
+async function fetchDnbFundHistory(fund, mode = "update") {
+  const seeded = seededDnbFundHistory(fund);
+  const rowsByDate = new Map();
+
+  // Keep uploaded historical rows available also during normal updates so Supabase self-seeds
+  // without a manual database import.
+  for (const row of seeded) rowsByDate.set(row.date, row);
+
+  try {
+    const current = await fetchDnbFundCurrent(fund);
+    rowsByDate.set(current.date, current);
+  } catch (error) {
+    if (!seeded.length) throw error;
+    // If DNB page scraping fails temporarily, keep seeded history. The error is not fatal
+    // because this endpoint can still seed/read historical values.
+  }
+
+  return Array.from(rowsByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
+
 async function fetchIndexHistory(index, startDate, endDate, mode = "backfill") {
+  if (index.provider === "dnb_fund") return fetchDnbFundHistory(index, mode);
   if (index.provider === "yahoo") return fetchYahooHistory(index, mode === "update" ? "1mo" : "1y");
 
   try {
@@ -298,7 +475,7 @@ function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()
     metricRows.push({
       metric_key: index.metricKey,
       value: row.close,
-      unit: "points",
+      unit: index.unit || "points",
       source_name: row.sourceName,
       source_url: row.sourceUrl,
       source_document: row.sourceDocument,
@@ -334,11 +511,20 @@ async function updateIndices(action) {
   for (const index of INDICES) {
     try {
       const historyRows = await fetchIndexHistory(index, startDate, endDate, action);
-      const usefulRows = action === "update" ? historyRows.slice(-3) : historyRows;
-      const existing = await getExistingDates(index.metricKey, isoDate(startDate));
+      const usefulRows = index.provider === "dnb_fund" ? historyRows : (action === "update" ? historyRows.slice(-3) : historyRows);
+      const existingCutoff = index.provider === "dnb_fund" ? "2025-01-01" : isoDate(startDate);
+      const existing = await getExistingDates(index.metricKey, existingCutoff);
       const metricRows = rowsToMetricRows(index, usefulRows, fetchedAt, existing);
       const inserted = await insertIndexRows(metricRows);
-      saved.push({ index: index.id, metricKey: index.metricKey, fetchedRows: usefulRows.length, savedRows: inserted.length });
+      saved.push({
+        index: index.id,
+        metricKey: index.metricKey,
+        provider: index.provider,
+        fetchedRows: usefulRows.length,
+        savedRows: inserted.length,
+        firstDate: usefulRows[0]?.date || null,
+        lastDate: usefulRows[usefulRows.length - 1]?.date || null,
+      });
     } catch (error) {
       errors.push(`${index.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -352,20 +538,47 @@ async function updateIndices(action) {
   };
 }
 
-async function fetchRows() {
+async function fetchRowsForMetricKey(metricKey, cutoffIso) {
   const supabase = getSupabaseAdmin();
-  const keys = INDICES.map((index) => index.metricKey);
 
   const { data, error } = await supabase
     .from("market_metrics")
     .select("*")
-    .in("metric_key", keys)
+    .eq("metric_key", metricKey)
     .eq("status", "ok")
-    .order("observed_date", { ascending: false })
-    .limit(4000);
+    .gte("observed_date", cutoffIso)
+    .not("observed_date", "is", null)
+    .order("observed_date", { ascending: true })
+    .limit(800);
 
   if (error) throw error;
   return data || [];
+}
+
+async function fetchRows() {
+  const cutoffIso = addDays(new Date(), -370).toISOString().slice(0, 10);
+  const results = await Promise.allSettled(
+    INDICES.map((index) => fetchRowsForMetricKey(index.metricKey, cutoffIso))
+  );
+
+  const rows = [];
+  const errors = [];
+
+  results.forEach((result, index) => {
+    const item = INDICES[index];
+
+    if (result.status === "fulfilled") {
+      rows.push(...result.value);
+    } else {
+      errors.push(`${item.name}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`);
+    }
+  });
+
+  if (errors.length && !rows.length) {
+    throw new Error(errors.join(" | "));
+  }
+
+  return rows;
 }
 
 function rowDate(row) {
@@ -450,7 +663,7 @@ function buildReadPayload(rows) {
       description: index.description,
       value: latest?.value ?? null,
       date: latest?.date ?? null,
-      unit: "points",
+      unit: index.unit || "points",
       sourceName: latestRow?.source_name || index.sourceName,
       sourceUrl: latestRow?.source_url || index.sourceUrl,
       fetchedAt: latestRow?.fetched_at || null,
@@ -463,8 +676,10 @@ function buildReadPayload(rows) {
   const errors = items.filter((item) => !Number.isFinite(Number(item.value))).map((item) => `${item.name}: mangler verdi`);
 
   return {
+    build: "indices-dnb-funds-v1-2026-06-15",
     status: errors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
-    sourceName: "Market indices",
+    sourceName: "Market indices + DNB funds",
+    readMethod: "per_metric_370d",
     fetchedAt: new Date().toISOString(),
     items,
     errors,

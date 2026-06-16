@@ -1,42 +1,30 @@
-# Market Dashboard — Watchlist hype tickers + index zero fix
+# Market Dashboard — US close index workflow fix
 
-## Watchlist
+Denne pakken justerer `update-indices.yml`.
 
-Følgende er lagt til i eksisterende `Watchlist`:
+## Hvorfor
 
-- SpaceX (`SPCX`)
-- Tesla (`TSLA`)
-- Nvidia (`NVDA`)
-- Microsoft (`MSFT`)
-- Alphabet (`GOOGL`)
-- Coinbase (`COIN`)
+S&P 500, Nasdaq 100, Dow Jones og VIX var ikke oppdatert etter 12. juni fordi indeks-workflowen kun kjørte ca. 18:15 norsk sommertid.
 
-Dette er lagt inn i samme `api/watchlist.js`, altså ingen ny tile og ingen ny API-fil.
+På det tidspunktet er USA-markedet fortsatt åpent, så kilden kan fortsatt bare ha siste fullførte close fra forrige handelsdag.
 
-## Indeksgrafer: 0-verdier
+## Endring
 
-`api/indices.js` er gjort robust mot 0-observasjoner.
+`update-indices.yml` kjører nå to ganger per ukedag:
 
-### Problem
-Noen indekser, f.eks. OSEBX/VIX, kunne få `0` i historikken når kilden ikke hadde publisert faktisk verdi for en dag. Da falt overlay-grafen til null.
+- `15 16 * * 1-5`
+  - ca. 18:15 norsk sommertid
+  - bra for DNB-fond, Oslo/Norden/Europa
 
-### Fix
-- Nye Yahoo-observasjoner med `close <= 0` ignoreres.
-- Ved innlegging av historikk: hvis en rad har `0`/mangler verdi, brukes forrige gyldige observasjon.
-- Ved lesing fra Supabase: eksisterende gamle `0`-verdier forward-filles i API-responsen, slik at grafen ikke faller til null selv om gamle 0-rader ligger i databasen.
+- `30 22 * * 1-5`
+  - ca. 00:30 norsk sommertid
+  - etter US close
+  - bra for S&P 500, Nasdaq 100, Dow Jones og VIX
 
 ## Etter deploy
 
-Kjør gjerne:
+Kjør gjerne `Update market indices` manuelt én gang, men S&P/Nasdaq får normalt ny full close først etter USA-stenging.
 
-- `/api/watchlist?action=update`
-- `/api/indices?action=update`
+Sjekk:
 
-Sjekk deretter:
-
-- `/api/watchlist`
-- `/api/indices`
-
-For indekser skal build være:
-
-`indices-zero-forwardfill-v1-2026-06-15`
+`/api/indices`

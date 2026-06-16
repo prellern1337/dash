@@ -451,25 +451,37 @@ async function fetchDnbFundHistory(fund, mode = "update") {
   return Array.from(rowsByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function yahooFallbackIndex(index) {
+  if (!index.yahooSymbol) return null;
+
+  return {
+    ...index,
+    provider: "yahoo",
+    symbol: index.yahooSymbol,
+    sourceName: "Yahoo Finance",
+    sourceUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(index.yahooSymbol)}/`,
+  };
+}
+
 async function fetchIndexHistory(index, startDate, endDate, mode = "backfill") {
   if (index.provider === "dnb_fund") return fetchDnbFundHistory(index, mode);
-  if (index.provider === "yahoo") return fetchYahooHistory(index, mode === "update" ? "1mo" : "1y");
 
-  try {
-    return await fetchStooqHistory(index, startDate, endDate);
-  } catch (stooqError) {
-    if (!index.yahooSymbol) throw stooqError;
+  const yahooRange = mode === "update" ? "1mo" : "1y";
 
-    const yahooIndex = {
-      ...index,
-      provider: "yahoo",
-      symbol: index.yahooSymbol,
-      sourceName: "Yahoo Finance",
-      sourceUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(index.yahooSymbol)}/`,
-    };
+  if (index.provider === "yahoo") return fetchYahooHistory(index, yahooRange);
 
-    return fetchYahooHistory(yahooIndex, mode === "update" ? "1mo" : "1y");
+  // For US/global indices we have seen Stooq lag behind Yahoo after US close.
+  // If a Yahoo symbol exists, use Yahoo as primary and keep Stooq as fallback.
+  const yahooIndex = yahooFallbackIndex(index);
+  if (yahooIndex) {
+    try {
+      return await fetchYahooHistory(yahooIndex, yahooRange);
+    } catch (yahooError) {
+      return fetchStooqHistory(index, startDate, endDate);
+    }
   }
+
+  return fetchStooqHistory(index, startDate, endDate);
 }
 
 async function insertIndexRows(rows) {
@@ -729,7 +741,7 @@ function buildReadPayload(rows) {
   const errors = items.filter((item) => !isValidMarketValue(item.value)).map((item) => `${item.name}: mangler verdi`);
 
   return {
-    build: "indices-zero-forwardfill-v1-2026-06-15",
+    build: "indices-yahoo-primary-v1-2026-06-16",
     status: errors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: "Market indices + DNB funds",
     readMethod: "per_metric_370d",

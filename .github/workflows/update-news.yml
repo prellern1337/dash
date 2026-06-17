@@ -1,0 +1,23 @@
+name: Update newsfeed
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs Monday-Friday, several times during the Norwegian business day.
+    # Approx. 09:05, 12:05, 15:05 and 17:05 Norway summer time.
+    # In winter this is one hour earlier because GitHub cron uses UTC.
+    - cron: '5 7,10,13,15 * * 1-5'
+
+jobs:
+  update-news:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Vercel newsfeed update
+        env:
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          curl -fsS \
+            -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
+            "https://dash-eight-topaz.vercel.app/api/news?action=update"

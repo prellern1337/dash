@@ -1,32 +1,40 @@
-# Market Dashboard — indices Yahoo primary fix
+# Market Dashboard — news 4d, DNB diagnostics and SWAP alignment
 
-Denne pakken fikser at S&P 500 / Nasdaq 100 / Dow Jones / VIX ikke oppdaterte seg selv om Yahoo hadde nyere close.
+## Endringer
 
-## Problem
+### Newsfeed
+- `/api/news` vurderer nå ferske artikler som maks 4 dager gamle.
+- Teksten `15 mest relevante` ved siden av nyhetsoverskriften i appen er fjernet.
+- `update-news.yml` er med i pakken og må ligge i `.github/workflows/`.
 
-For flere amerikanske indekser brukte `api/indices.js` Stooq som primærkilde og Yahoo kun som fallback hvis Stooq feilet. Hvis Stooq svarte OK, men hang etter på dato, ble Yahoo aldri brukt.
+### DNB-fond
+- `update-indices.yml` får en ekstra morgenkjøring kl. 06:30 UTC.
+- `/api/indices?action=update` returnerer nå ekstra diagnostikk per indeks/fond:
+  - `sourceLatestDate`
+  - `sourceLatestClose`
+  - `sourceLatestRawSource`
+  - `seedLatestDate`
 
-## Fix
+Dette gjør det tydelig om DNB-siden faktisk publiserer en nyere NAV enn historikken som allerede ligger seedet/importert.
 
-For indekser som har `yahooSymbol`, brukes nå Yahoo som primærkilde og Stooq som fallback.
-
-Dette gjelder blant annet:
-
-- S&P 500
-- Nasdaq 100
-- Dow Jones
-- DAX / Euro Stoxx 50 / VIX der Yahoo-symbol finnes
+### SWAP-layout
+- SWAP-radene bruker nå faste kolonner.
+- Prosentverdier står på samme høyrelinje selv når endringen er `0bp`.
+- `0bp` får samme badge-bredde som opp/ned-endringer.
 
 ## Etter deploy
 
-Kjør:
+1. Sjekk at denne workflowen finnes i GitHub Actions:
+   - `Update newsfeed`
 
-`/api/indices?action=update`
+2. Kjør manuelt:
+   - `/api/news?action=update`
+   - `/api/indices?action=update`
 
-Sjekk deretter:
+3. Sjekk:
+   - `/api/news`
+   - `/api/indices`
 
-`/api/indices`
-
-Build-markør:
-
-`indices-yahoo-primary-v1-2026-06-16`
+Build-markører:
+- `newsfeed-4d-debug-v1-2026-06-17`
+- `indices-yahoo-quote-dnb-diagnostics-v1-2026-06-17`

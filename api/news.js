@@ -2,7 +2,7 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
 
-const BUILD = "newsfeed-v1-2026-06-13";
+const BUILD = "newsfeed-4d-debug-v1-2026-06-17";
 const METRIC_KEY = "newsfeed_article";
 
 const SOURCES = [
@@ -446,6 +446,51 @@ function rowToArticle(row) {
   };
 }
 
+
+function articleTimestamp(article) {
+  const value = article.publishedAt || article.fetchedAt;
+  const time = new Date(value || 0).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function ageHoursFromNow(article) {
+  const time = articleTimestamp(article);
+  if (!time) return 999;
+  return Math.max(0, (Date.now() - time) / (1000 * 60 * 60));
+}
+
+function dynamicArticleScore(article) {
+  const base = Number(article.relevanceScore || 0);
+  const age = ageHoursFromNow(article);
+
+  // Strong freshness boost at read-time, so old high-score articles do not dominate forever.
+  const freshnessBoost = Math.max(0, 28 - age / 2);
+  const todayBoost = new Date(articleTimestamp(article)).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10) ? 10 : 0;
+
+  return Number((base + freshnessBoost + todayBoost).toFixed(2));
+}
+
+function splitFreshAndOlder(articles) {
+  const freshCutoffMs = Date.now() - 4 * 24 * 60 * 60 * 1000;
+  const fresh = [];
+  const older = [];
+
+  for (const article of articles) {
+    if (articleTimestamp(article) >= freshCutoffMs) fresh.push(article);
+    else older.push(article);
+  }
+
+  return { fresh, older };
+}
+
+function sortArticlesForDisplay(articles) {
+  return [...articles].sort((a, b) => {
+    const scoreDiff = dynamicArticleScore(b) - dynamicArticleScore(a);
+    if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
+    return articleTimestamp(b) - articleTimestamp(a);
+  });
+}
+
 async function readArticles() {
   const supabase = getSupabaseAdmin();
 
@@ -455,18 +500,34 @@ async function readArticles() {
     .eq("metric_key", METRIC_KEY)
     .eq("status", "ok")
     .order("fetched_at", { ascending: false })
-    .limit(500);
+    .limit(700);
 
   if (error) throw error;
 
-  const deduped = dedupeArticles((data || []).map(rowToArticle));
-  return deduped
-    .sort((a, b) => {
-      const scoreDiff = Number(b.relevanceScore || 0) - Number(a.relevanceScore || 0);
-      if (Math.abs(scoreDiff) > 0.01) return scoreDiff;
-      return new Date(b.publishedAt || b.fetchedAt || 0).getTime() - new Date(a.publishedAt || a.fetchedAt || 0).getTime();
-    })
-    .slice(0, 15);
+  const all = dedupeArticles((data || []).map(rowToArticle));
+  const { fresh, older } = splitFreshAndOlder(all);
+  const primary = sortArticlesForDisplay(fresh).slice(0, 15);
+
+  // If the last 4 days have too few relevant articles, top up with older ones.
+  const topUp = primary.length < 15 ? sortArticlesForDisplay(older).slice(0, 15 - primary.length) : [];
+  const articles = [...primary, ...topUp];
+
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayCount = all.filter((article) => String(article.publishedAt || article.fetchedAt || "").slice(0, 10) === todayIso).length;
+  const newest = [...all].sort((a, b) => articleTimestamp(b) - articleTimestamp(a))[0] || null;
+
+  return {
+    articles,
+    diagnostics: {
+      totalRows: data?.length || 0,
+      dedupedCount: all.length,
+      fresh4dCount: fresh.length,
+      todayCount,
+      newestFetchedAt: newest?.fetchedAt || null,
+      newestPublishedAt: newest?.publishedAt || null,
+      newestTitle: newest?.title || null,
+    },
+  };
 }
 
 async function updateNews() {
@@ -487,6 +548,13 @@ async function updateNews() {
     rankedCount: ranked.length,
     savedCount: saved.length,
     saved: saved.map(rowToArticle).slice(0, 15),
+    topRanked: ranked.slice(0, 10).map((article) => ({
+      title: article.title,
+      sourceName: article.sourceName,
+      publishedAt: article.publishedAt,
+      relevanceScore: article.relevanceScore,
+      url: article.url,
+    })),
     errors,
   };
 }
@@ -503,15 +571,19 @@ export default async function handler(request, response) {
       return;
     }
 
-    const articles = await readArticles();
+    const { articles, diagnostics } = await readArticles();
 
     response.status(200).json({
       build: BUILD,
       status: articles.length ? "ok" : "empty",
       metricGroup: "newsfeed",
       sourceName: "DN, Finansavisen, E24 og Estate",
-      fetchedAt: articles[0]?.fetchedAt || null,
-      items: articles,
+      fetchedAt: diagnostics.newestFetchedAt || articles[0]?.fetchedAt || null,
+      items: articles.map((article) => ({
+        ...article,
+        displayScore: dynamicArticleScore(article),
+      })),
+      diagnostics,
       message: articles.length ? null : "Ingen nyheter lagret ennå. Kjør /api/news?action=update.",
     });
   } catch (error) {

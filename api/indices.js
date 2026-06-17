@@ -203,6 +203,53 @@ function stooqSymbolForUrl(symbol) {
 function yahooSymbolForUrl(symbol) {
   return encodeURIComponent(symbol);
 }
+function yahooQuotePageUrl(symbol) {
+  return `https://finance.yahoo.com/quote/${encodeURIComponent(symbol)}/`;
+}
+
+async function fetchYahooLatestQuote(index) {
+  const symbol = yahooSymbolForUrl(index.symbol);
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${symbol}`;
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "en-US,en;q=0.9,nb-NO;q=0.8",
+      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+      "Cache-Control": "no-cache",
+    },
+  });
+
+  if (!response.ok) throw new Error(`Yahoo quote svarte med ${response.status} for ${index.name}.`);
+
+  const json = await response.json();
+  const quote = json?.quoteResponse?.result?.[0];
+
+  const price = Number(quote?.regularMarketPrice);
+  const marketTime = Number(quote?.regularMarketTime || quote?.postMarketTime || quote?.preMarketTime);
+  const previousClose = Number(quote?.regularMarketPreviousClose);
+
+  if (!isValidMarketValue(price) || !Number.isFinite(marketTime)) {
+    return null;
+  }
+
+  return {
+    date: new Date(marketTime * 1000).toISOString().slice(0, 10),
+    open: Number.isFinite(Number(quote?.regularMarketOpen)) ? Number(quote.regularMarketOpen) : null,
+    high: Number.isFinite(Number(quote?.regularMarketDayHigh)) ? Number(quote.regularMarketDayHigh) : null,
+    low: Number.isFinite(Number(quote?.regularMarketDayLow)) ? Number(quote.regularMarketDayLow) : null,
+    close: price,
+    volume: Number.isFinite(Number(quote?.regularMarketVolume)) ? Number(quote.regularMarketVolume) : null,
+    previousClose: Number.isFinite(previousClose) ? previousClose : null,
+    sourceName: "Yahoo Finance",
+    sourceUrl: yahooQuotePageUrl(index.symbol),
+    sourceDocument: `${index.name} latest quote`,
+    rawSource: "yahoo_quote",
+    forceInsert: true,
+  };
+}
+
+
 
 async function fetchText(url) {
   const response = await fetch(url, {
@@ -265,7 +312,7 @@ async function fetchStooqHistory(index, startDate, endDate) {
   }));
 }
 
-async function fetchYahooHistory(index, range = "1y") {
+async function fetchYahooHistory(index, range = "1y", includeLatestQuote = false) {
   const symbol = yahooSymbolForUrl(index.symbol);
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?range=${range}&interval=1d`;
 
@@ -306,6 +353,30 @@ async function fetchYahooHistory(index, range = "1y") {
       close: Number(row.close),
       volume: Number.isFinite(Number(row.volume)) ? Number(row.volume) : null,
     }));
+
+  if (includeLatestQuote) {
+    try {
+      const latestQuote = await fetchYahooLatestQuote(index);
+
+      if (latestQuote?.date && isValidMarketValue(latestQuote.close)) {
+        const existingIndex = rows.findIndex((row) => row.date === latestQuote.date);
+
+        if (existingIndex >= 0) {
+          rows[existingIndex] = {
+            ...rows[existingIndex],
+            ...latestQuote,
+            rawSource: "yahoo_chart_plus_quote",
+          };
+        } else {
+          rows.push(latestQuote);
+        }
+
+        rows.sort((a, b) => a.date.localeCompare(b.date));
+      }
+    } catch {
+      // Keep chart data if quote endpoint is unavailable.
+    }
+  }
 
   if (!rows.length) throw new Error(`Yahoo Finance returnerte ingen data for ${index.name} (${index.symbol}).`);
 
@@ -459,7 +530,7 @@ function yahooFallbackIndex(index) {
     provider: "yahoo",
     symbol: index.yahooSymbol,
     sourceName: "Yahoo Finance",
-    sourceUrl: `https://finance.yahoo.com/quote/${encodeURIComponent(index.yahooSymbol)}/`,
+    sourceUrl: yahooQuotePageUrl(index.yahooSymbol),
   };
 }
 
@@ -468,14 +539,14 @@ async function fetchIndexHistory(index, startDate, endDate, mode = "backfill") {
 
   const yahooRange = mode === "update" ? "1mo" : "1y";
 
-  if (index.provider === "yahoo") return fetchYahooHistory(index, yahooRange);
+  if (index.provider === "yahoo") return fetchYahooHistory(index, yahooRange, mode === "update");
 
   // For US/global indices we have seen Stooq lag behind Yahoo after US close.
   // If a Yahoo symbol exists, use Yahoo as primary and keep Stooq as fallback.
   const yahooIndex = yahooFallbackIndex(index);
   if (yahooIndex) {
     try {
-      return await fetchYahooHistory(yahooIndex, yahooRange);
+      return await fetchYahooHistory(yahooIndex, yahooRange, mode === "update");
     } catch (yahooError) {
       return fetchStooqHistory(index, startDate, endDate);
     }
@@ -530,7 +601,7 @@ function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()
     }
 
     const key = `${index.metricKey}|${row.date}`;
-    if (existingSet.has(key)) continue;
+    if (existingSet.has(key) && !row.forceInsert) continue;
 
     metricRows.push({
       metric_key: index.metricKey,
@@ -555,6 +626,8 @@ function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()
         provider: row.rawSource,
         symbol: index.symbol,
         forwardFilled: Boolean(row.forwardFilled),
+        forceInsert: Boolean(row.forceInsert),
+        previousClose: row.previousClose ?? null,
       },
     });
   }
@@ -577,6 +650,10 @@ async function updateIndices(action) {
       const existing = await getExistingDates(index.metricKey, existingCutoff);
       const metricRows = rowsToMetricRows(index, usefulRows, fetchedAt, existing);
       const inserted = await insertIndexRows(metricRows);
+      const sourceRows = usefulRows.filter((row) => row.rawSource !== "uploaded_excel_seed");
+      const latestSourceRow = sourceRows[sourceRows.length - 1] || null;
+      const latestSeedRow = [...usefulRows].filter((row) => row.rawSource === "uploaded_excel_seed").pop() || null;
+
       saved.push({
         index: index.id,
         metricKey: index.metricKey,
@@ -585,6 +662,12 @@ async function updateIndices(action) {
         savedRows: inserted.length,
         firstDate: usefulRows[0]?.date || null,
         lastDate: usefulRows[usefulRows.length - 1]?.date || null,
+        lastClose: usefulRows[usefulRows.length - 1]?.close ?? null,
+        lastRawSource: usefulRows[usefulRows.length - 1]?.rawSource || null,
+        sourceLatestDate: latestSourceRow?.date || null,
+        sourceLatestClose: latestSourceRow?.close ?? null,
+        sourceLatestRawSource: latestSourceRow?.rawSource || null,
+        seedLatestDate: latestSeedRow?.date || null,
       });
     } catch (error) {
       errors.push(`${index.name}: ${error instanceof Error ? error.message : String(error)}`);
@@ -741,7 +824,7 @@ function buildReadPayload(rows) {
   const errors = items.filter((item) => !isValidMarketValue(item.value)).map((item) => `${item.name}: mangler verdi`);
 
   return {
-    build: "indices-yahoo-primary-v1-2026-06-16",
+    build: "indices-yahoo-quote-dnb-diagnostics-v1-2026-06-17",
     status: errors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: "Market indices + DNB funds",
     readMethod: "per_metric_370d",

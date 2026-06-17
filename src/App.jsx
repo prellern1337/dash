@@ -483,18 +483,18 @@ function formatSwapBps(value) {
 }
 
 function SwapChangeBadge({ changeBps }) {
-  if (!Number.isFinite(Number(changeBps))) return null;
-
-  const bps = Number(changeBps);
-  const isUp = bps > 0;
-  const isDown = bps < 0;
+  const hasValue = Number.isFinite(Number(changeBps));
+  const bps = hasValue ? Number(changeBps) : 0;
+  const isUp = hasValue && bps > 0;
+  const isDown = hasValue && bps < 0;
   const className = isUp ? "text-rose-600" : isDown ? "text-emerald-600" : "text-stone-400";
 
   return (
-    <span className={`ml-1 inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-[9px] font-semibold tabular-nums ${className}`}>
+    <span className={`ml-1 inline-flex w-[34px] shrink-0 items-center justify-end gap-0.5 whitespace-nowrap text-[9px] font-semibold tabular-nums ${className}`}>
       {isUp && <ArrowUpRight size={10} />}
       {isDown && <ArrowDownRight size={10} />}
-      {!isUp && !isDown ? "0bp" : formatSwapBps(bps)}
+      {!isUp && !isDown && <span className="inline-block w-[10px]" aria-hidden="true" />}
+      {!hasValue ? "—" : !isUp && !isDown ? "0bp" : formatSwapBps(bps)}
     </span>
   );
 }
@@ -503,12 +503,12 @@ function RateStack({ rows }) {
   return (
     <div className="mt-2 space-y-1.5">
       {rows.map((row) => (
-        <div key={row.label} className="flex items-center justify-between gap-1 rounded-xl bg-stone-50 px-2 py-1.5">
-          <span className="shrink-0 text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
-          <span className="flex min-w-0 items-center justify-end text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
+        <div key={row.label} className="grid grid-cols-[26px_minmax(0,1fr)_38px] items-center gap-1 rounded-xl bg-stone-50 px-2 py-1.5">
+          <span className="text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
+          <span className="min-w-0 text-right text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
             <span className="whitespace-nowrap">{row.value}</span>
-            <SwapChangeBadge changeBps={row.changeBps} />
           </span>
+          <SwapChangeBadge changeBps={row.changeBps} />
         </div>
       ))}
     </div>
@@ -2018,7 +2018,6 @@ export default function MarketDashboardPrototype() {
 
           <div className="col-span-2 mt-2 flex items-center justify-between">
             <h3 className="text-sm font-semibold text-stone-800">Nyheter</h3>
-            <span className="text-[11px] text-stone-400">15 mest relevante</span>
           </div>
 
           <NewsFeedTile newsState={newsState} onClick={() => setShowNewsFeed(true)} />

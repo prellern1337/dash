@@ -1,5 +1,7 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
-import updateSwapsHandler from "../lib/update-swaps.js";
+import updateSwapsHandler, { debugSwaps } from "../lib/update-swaps.js";
+
+const BUILD = "seb-swaps-direct-api-hard-fix-v1-2026-06-17";
 
 const WANTED = [
   { currency: "NOK", tenor: "3 Yr", key: "swap_nok_3y" },
@@ -42,6 +44,10 @@ async function fetchRows() {
 
 function latestByKey(rows, key, status = null) {
   return rows.find((row) => row.metric_key === key && (!status || row.status === status)) || null;
+}
+
+function newestRowByKey(rows, key) {
+  return rows.find((row) => row.metric_key === key) || null;
 }
 
 function dateKey(value) {
@@ -128,12 +134,23 @@ async function readSwapsHandler(request, response) {
     const history = buildHistory(rows);
     const missing = [];
     const staleOrError = [];
+    const diagnostics = {};
 
     for (const item of WANTED) {
       const good = latestByKey(rows, item.key, "ok");
       const latestRun = latestByKey(rows, item.key);
 
       latest[item.key] = latestRun;
+      diagnostics[item.key] = {
+        latestRunFetchedAt: latestRun?.fetched_at || null,
+        latestRunStatus: latestRun?.status || null,
+        latestRunMessage: latestRun?.message || null,
+        latestGoodFetchedAt: good?.fetched_at || null,
+        latestGoodObservedDate: good?.observed_date || null,
+        latestGoodValue: good?.value ?? null,
+        latestGoodRawMethod: good?.raw?.method || null,
+        latestGoodBuild: good?.raw?.build || null,
+      };
 
       if (!good) {
         missing.push(item.key);
@@ -169,6 +186,7 @@ async function readSwapsHandler(request, response) {
 
     response.setHeader("Cache-Control", "no-store, max-age=0");
     response.status(200).json({
+      build: BUILD,
       status,
       sourceName: "SEB Swap Rates",
       sourceUrl: "https://sebgroup.com/our-offering/reports-and-publications/rates-and-iban/swap-rates",
@@ -177,6 +195,7 @@ async function readSwapsHandler(request, response) {
       history,
       missing,
       staleOrError,
+      diagnostics,
     });
   } catch (error) {
     response.status(500).json({
@@ -196,6 +215,11 @@ export default async function handler(request, response) {
 
   if (action === "update") {
     return updateSwapsHandler(request, response);
+  }
+
+  if (action === "debug-swaps") {
+    response.setHeader("Cache-Control", "no-store, max-age=0");
+    return response.status(200).json(await debugSwaps());
   }
 
   return readSwapsHandler(request, response);

@@ -1,40 +1,53 @@
-# Market Dashboard — news 4d, DNB diagnostics and SWAP alignment
+# Market Dashboard — SEB swaps direct API hard fix
+
+Denne pakken fikser at SWAP-rentene ble stående på 15. juni selv om SEB-kilden viste ferske satser.
+
+## Sannsynlig årsak
+
+Den gamle oppdateringen rendret SEB-siden med Chromium/Puppeteer og prøvde å parse tabellen fra HTML/body text. Det er tregt og sårbart. Hvis SEB-siden rendret annerledes, eller Vercel/GitHub Action fikk en gammel/ufullstendig side, ble det lagret error-rader og appen viste siste OK-verdi fra 15. juni.
+
+## Fix
+
+`lib/update-swaps.js` bruker nå SEBs interne JSON-endepunkt som primærkilde:
+
+`/ssc/trading/fx-rates-bff/api/rates/swap?currency=NOK`
+`/ssc/trading/fx-rates-bff/api/rates/swap?currency=SEK`
+
+med cache-busting og no-cache/no-store headers.
+
+Hvis direkte API feiler, faller den tilbake til gammel rendered-page-metode.
 
 ## Endringer
 
-### Newsfeed
-- `/api/news` vurderer nå ferske artikler som maks 4 dager gamle.
-- Teksten `15 mest relevante` ved siden av nyhetsoverskriften i appen er fjernet.
-- `update-news.yml` er med i pakken og må ligge i `.github/workflows/`.
-
-### DNB-fond
-- `update-indices.yml` får en ekstra morgenkjøring kl. 06:30 UTC.
-- `/api/indices?action=update` returnerer nå ekstra diagnostikk per indeks/fond:
-  - `sourceLatestDate`
-  - `sourceLatestClose`
-  - `sourceLatestRawSource`
-  - `seedLatestDate`
-
-Dette gjør det tydelig om DNB-siden faktisk publiserer en nyere NAV enn historikken som allerede ligger seedet/importert.
-
-### SWAP-layout
-- SWAP-radene bruker nå faste kolonner.
-- Prosentverdier står på samme høyrelinje selv når endringen er `0bp`.
-- `0bp` får samme badge-bredde som opp/ned-endringer.
+- Direkte SEB API er primærmetode.
+- Rendered page er fallback.
+- `observed_date` settes til dagens dato.
+- Alle lagrede OK-rader får `raw.build` og `raw.method`.
+- `/api/swaps` returnerer nå `diagnostics`.
+- Ny debug:
+  `/api/swaps?action=debug-swaps`
 
 ## Etter deploy
 
-1. Sjekk at denne workflowen finnes i GitHub Actions:
-   - `Update newsfeed`
+1. Kjør:
+   `/api/swaps?action=debug-swaps`
 
-2. Kjør manuelt:
-   - `/api/news?action=update`
-   - `/api/indices?action=update`
+2. Sjekk at NOK og SEK returnerer rates for:
+   - 3 Yr
+   - 5 Yr
+   - 10 Yr
 
-3. Sjekk:
-   - `/api/news`
-   - `/api/indices`
+3. Kjør:
+   `/api/swaps?action=update`
 
-Build-markører:
-- `newsfeed-4d-debug-v1-2026-06-17`
-- `indices-yahoo-quote-dnb-diagnostics-v1-2026-06-17`
+4. Sjekk:
+   `/api/swaps`
+
+Se særlig på:
+- `diagnostics.swap_nok_5y.latestGoodFetchedAt`
+- `diagnostics.swap_nok_5y.latestGoodRawMethod`
+- `diagnostics.swap_nok_5y.latestGoodBuild`
+
+Build-markør:
+
+`seb-swaps-direct-api-hard-fix-v1-2026-06-17`

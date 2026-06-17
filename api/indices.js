@@ -150,6 +150,16 @@ function addDays(date, days) {
   return copy;
 }
 
+
+function dateToTime(date) {
+  const time = new Date(`${date}T12:00:00Z`).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function latestByDate(rows) {
+  return [...(rows || [])].sort((a, b) => dateToTime(a.date) - dateToTime(b.date)).pop() || null;
+}
+
 function parseNumber(value) {
   if (typeof value === "number") return value;
   if (value === null || value === undefined) return Number.NaN;
@@ -434,54 +444,120 @@ function parseDnbFundObservedDate(day, monthName, year) {
   return `${year}-${month}-${String(day).padStart(2, "0")}`;
 }
 
+function addDnbNavCandidate(candidates, fund, value, date, rawSource = "dnb_fund_page") {
+  const close = parseDnbNavNumber(String(value || ""));
+  if (!Number.isFinite(close) || close <= 0 || !date) return;
+
+  candidates.push({
+    date,
+    close,
+    open: null,
+    high: null,
+    low: null,
+    volume: null,
+    sourceName: fund.sourceName,
+    sourceUrl: fund.sourceUrl,
+    sourceDocument: `${fund.name} NAV/Kurs`,
+    rawSource,
+    forceInsert: true,
+  });
+}
+
 function extractDnbFundNav(html, fund) {
   const text = normaliseDnbText(html);
+  const candidates = [];
 
-  const patterns = [
-    /NAV\/Kurs\s+([\d\s.,]+)\s*kroner\s+(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/i,
-    /NAV\s*\/\s*Kurs[\s\S]{0,120}?([\d\s.,]+)\s*kroner[\s\S]{0,80}?(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/i,
+  const navPatterns = [
+    /NAV\/Kurs\s+([\d\s.,]+)\s*kroner\s+(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/gi,
+    /NAV\s*\/\s*Kurs[\s\S]{0,160}?([\d\s.,]+)\s*kroner[\s\S]{0,120}?(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/gi,
+    /NAV\/Price\s+([\d\s.,]+)\s*kroner\s+(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/gi,
+    /NAV\s*\/\s*Price[\s\S]{0,160}?([\d\s.,]+)\s*kroner[\s\S]{0,120}?(\d{1,2})\.?\s+([A-Za-zÆØÅæøå.]+)\s+(20\d{2})/gi,
   ];
 
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (!match) continue;
-
-    const value = parseDnbNavNumber(match[1]);
-    const observedDate = parseDnbFundObservedDate(match[2], match[3], match[4]);
-
-    if (Number.isFinite(value) && value > 0 && observedDate) {
-      return {
-        date: observedDate,
-        close: value,
-        open: null,
-        high: null,
-        low: null,
-        volume: null,
-        sourceName: fund.sourceName,
-        sourceUrl: fund.sourceUrl,
-        sourceDocument: `${fund.name} NAV/Kurs`,
-        rawSource: "dnb_fund_page",
-      };
+  for (const pattern of navPatterns) {
+    for (const match of text.matchAll(pattern)) {
+      const observedDate = parseDnbFundObservedDate(match[2], match[3], match[4]);
+      addDnbNavCandidate(candidates, fund, match[1], observedDate, "dnb_fund_page");
     }
   }
+
+  // Some DNB/React payloads expose dates as ISO strings. Keep these generic and
+  // conservative: only accept them if a NAV-like key is nearby.
+  const jsonLike = String(html || "")
+    .replace(/\\"/g, '"')
+    .replace(/\\u002F/g, "/")
+    .replace(/\\u002D/g, "-")
+    .replace(/\\u00a0/g, " ");
+
+  const isoPatterns = [
+    /"(?:nav|navPrice|navValue|price|lastPrice|unitPrice|kurs)"\s*:\s*"?([\d\s.,]+)"?[\s\S]{0,180}?"(?:date|navDate|priceDate|valuationDate|asOfDate)"\s*:\s*"(\d{4}-\d{2}-\d{2})"/gi,
+    /"(?:date|navDate|priceDate|valuationDate|asOfDate)"\s*:\s*"(\d{4}-\d{2}-\d{2})"[\s\S]{0,180}?"(?:nav|navPrice|navValue|price|lastPrice|unitPrice|kurs)"\s*:\s*"?([\d\s.,]+)"?/gi,
+  ];
+
+  for (const match of jsonLike.matchAll(isoPatterns[0])) {
+    addDnbNavCandidate(candidates, fund, match[1], match[2], "dnb_fund_json");
+  }
+
+  for (const match of jsonLike.matchAll(isoPatterns[1])) {
+    addDnbNavCandidate(candidates, fund, match[2], match[1], "dnb_fund_json");
+  }
+
+  const latest = latestByDate(candidates);
+  if (latest) return latest;
 
   throw new Error(`Fant ikke NAV/Kurs på DNB-siden for ${fund.name}.`);
 }
 
+function dnbFundCandidateUrls(fund) {
+  const urls = new Set([fund.sourceUrl]);
+
+  if (fund.sourceUrl.includes("/sparing/fond/fond-liste/d/")) {
+    urls.add(fund.sourceUrl.replace("/sparing/fond/fond-liste/d/", "/sparing/fond/fond-liste/private-banking/d/"));
+    urls.add(fund.sourceUrl.replace("/sparing/fond/fond-liste/d/", "/sparing/fond/fond-liste/corporate-banking/d/"));
+    urls.add(fund.sourceUrl.replace("https://www.dnb.no/sparing/fond/fond-liste/d/", "https://www.dnb.no/en/saving/mutual-funds/fund-list/d/"));
+  }
+
+  return Array.from(urls);
+}
+
 async function fetchDnbFundCurrent(fund) {
-  const response = await fetch(fund.sourceUrl, {
-    headers: {
-      Accept: "text/html,application/xhtml+xml,*/*",
-      "Accept-Language": "nb-NO,nb;q=0.9,en-US;q=0.8,en;q=0.7",
-      "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-      "Cache-Control": "no-cache",
-    },
-  });
+  const errors = [];
 
-  if (!response.ok) throw new Error(`DNB svarte med ${response.status} for ${fund.name}.`);
+  for (const baseUrl of dnbFundCandidateUrls(fund)) {
+    const separator = baseUrl.includes("?") ? "&" : "?";
+    const url = `${baseUrl}${separator}ts=${Date.now()}`;
 
-  const html = await response.text();
-  return extractDnbFundNav(html, fund);
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml,application/json,*/*",
+          "Accept-Language": "nb-NO,nb;q=0.9,en-US;q=0.8,en;q=0.7",
+          "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
+          "Cache-Control": "no-cache, no-store, max-age=0",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+
+      if (!response.ok) {
+        errors.push(`${baseUrl}: HTTP ${response.status}`);
+        continue;
+      }
+
+      const html = await response.text();
+      const current = extractDnbFundNav(html, fund);
+
+      return {
+        ...current,
+        sourceUrl: baseUrl,
+        fetchUrl: url,
+      };
+    } catch (error) {
+      errors.push(`${baseUrl}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  throw new Error(`Fant ikke oppdatert NAV/Kurs for ${fund.name}. Forsøkte ${errors.join(" | ")}`);
 }
 
 function seededDnbFundHistory(fund) {
@@ -514,9 +590,10 @@ async function fetchDnbFundHistory(fund, mode = "update") {
     const current = await fetchDnbFundCurrent(fund);
     rowsByDate.set(current.date, current);
   } catch (error) {
+    // During an explicit update, do not hide a broken/stale DNB scrape behind seeded history.
+    // If we swallow this, the tile appears "successfully" updated while NAV is actually stuck.
+    if (mode === "update") throw error;
     if (!seeded.length) throw error;
-    // If DNB page scraping fails temporarily, keep seeded history. The error is not fatal
-    // because this endpoint can still seed/read historical values.
   }
 
   return Array.from(rowsByDate.values()).sort((a, b) => a.date.localeCompare(b.date));
@@ -627,6 +704,7 @@ function rowsToMetricRows(index, historyRows, fetchedAt, existingSet = new Set()
         symbol: index.symbol,
         forwardFilled: Boolean(row.forwardFilled),
         forceInsert: Boolean(row.forceInsert),
+        fetchUrl: row.fetchUrl || null,
         previousClose: row.previousClose ?? null,
       },
     });
@@ -824,7 +902,7 @@ function buildReadPayload(rows) {
   const errors = items.filter((item) => !isValidMarketValue(item.value)).map((item) => `${item.name}: mangler verdi`);
 
   return {
-    build: "indices-yahoo-quote-dnb-diagnostics-v1-2026-06-17",
+    build: "indices-dnb-current-nav-hard-fix-v1-2026-06-17",
     status: errors.length === items.length ? "empty" : errors.length ? "partial" : "ok",
     sourceName: "Market indices + DNB funds",
     readMethod: "per_metric_370d",
@@ -839,6 +917,30 @@ export default async function handler(request, response) {
     const action =
       request.query?.action ||
       new URL(request.url || "https://local/api/indices", "https://local").searchParams.get("action");
+
+    if (action === "debug-dnb") {
+      const funds = INDICES.filter((index) => index.provider === "dnb_fund");
+      const results = await Promise.allSettled(funds.map(async (fund) => ({
+        id: fund.id,
+        metricKey: fund.metricKey,
+        name: fund.name,
+        current: await fetchDnbFundCurrent(fund),
+        seedLatest: latestByDate(seededDnbFundHistory(fund)),
+      })));
+
+      response.setHeader("Cache-Control", "no-store, max-age=0");
+      response.status(200).json({
+        build: "indices-dnb-current-nav-hard-fix-v1-2026-06-17",
+        action,
+        status: results.some((result) => result.status === "rejected") ? "partial" : "ok",
+        results: results.map((result, index) => result.status === "fulfilled" ? result.value : {
+          id: funds[index]?.id,
+          name: funds[index]?.name,
+          error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+        }),
+      });
+      return;
+    }
 
     if (action === "update" || action === "backfill") {
       const result = await updateIndices(action);

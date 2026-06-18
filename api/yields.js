@@ -1,5 +1,6 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import updateYieldsHandler from "../lib/update-yields.js";
+import { normaliseYieldPeriod, periodFromNewsecDocument } from "../lib/yield-period.js";
 
 const SOURCES = [
   { key: "union", label: "UNION" },
@@ -46,6 +47,12 @@ function average(values) {
   return numeric.reduce((sum, value) => sum + value, 0) / numeric.length;
 }
 
+function rowPeriod(row, sourceKey) {
+  if (!row) return null;
+  return normaliseYieldPeriod(row.raw?.period)
+    || (sourceKey === "newsec" ? periodFromNewsecDocument(row.source_document) : null);
+}
+
 async function readYieldsHandler(request, response) {
   try {
     const rows = await fetchRows();
@@ -83,6 +90,7 @@ async function readYieldsHandler(request, response) {
           sourceName: latestGood?.source_name || source.label,
           sourceUrl: latestGood?.source_url || null,
           sourceDocument: latestGood?.source_document || null,
+          period: rowPeriod(latestGood, source.key),
           status: latestGood ? (hasNewerError ? "error" : "ok") : "empty",
           message: hasNewerError ? latestRun.message : null,
         };
@@ -96,11 +104,18 @@ async function readYieldsHandler(request, response) {
     }
 
     for (const source of SOURCES) {
+      const sourceCells = [
+        segments.office.sources[source.key],
+        segments.retail.sources[source.key],
+        segments.logistics.sources[source.key],
+      ];
+
       sourceRows.push({
         source: source.label,
-        office: segments.office.sources[source.key],
-        retail: segments.retail.sources[source.key],
-        logistics: segments.logistics.sources[source.key],
+        period: sourceCells.find((cell) => cell.period)?.period || null,
+        office: sourceCells[0],
+        retail: sourceCells[1],
+        logistics: sourceCells[2],
       });
     }
 

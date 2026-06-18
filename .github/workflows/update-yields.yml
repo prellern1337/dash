@@ -19,4 +19,4 @@ jobs:
         run: |
           curl -fsS \
             -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-            "https://dash-martin-mogstad-s-projects.vercel.app/api/update-yields"
+            "https://dash-eight-topaz.vercel.app/api/yields?action=update"

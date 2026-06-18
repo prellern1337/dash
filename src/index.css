@@ -26,3 +26,19 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* Prime Yield tile: show category left and yield value right.
+   The tile does not use SWAP bp/change badges, so hide the empty third column. */
+main > button:nth-of-type(8) .grid {
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  column-gap: 0.75rem !important;
+}
+
+main > button:nth-of-type(8) .grid > span:nth-child(2) {
+  justify-self: end;
+  text-align: right;
+}
+
+main > button:nth-of-type(8) .grid > span:last-child {
+  display: none !important;
+}

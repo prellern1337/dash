@@ -3,6 +3,14 @@
     {
       "path": "/api/update-rates",
       "schedule": "30 8 * * *"
+    },
+    {
+      "path": "/api/swap-refresh",
+      "schedule": "45 8 * * 1-5"
+    },
+    {
+      "path": "/api/dnb-fund-refresh",
+      "schedule": "15 18 * * 1-5"
     }
   ]
 }

@@ -1278,6 +1278,10 @@ function InsiderTradesOverlay({ onClose, insiderState }) {
 function YieldOverlay({ onClose, yieldState }) {
   const rows = yieldState.rows || fallbackYieldState.rows;
   const getRowSourceUrl = (row) => row.office?.sourceUrl || row.retail?.sourceUrl || row.logistics?.sourceUrl;
+  const periodSummary = rows.map((row) => row.period
+    ? `${row.source}${row.source === "Newsec" ? " " : " per "}${row.period}`
+    : `${row.source}: periode ikke oppgitt`
+  );
 
   return (
     <Overlay
@@ -1292,6 +1296,13 @@ function YieldOverlay({ onClose, yieldState }) {
         </div>
       }
     >
+      <div className="mb-3 rounded-2xl border border-stone-200 bg-white p-3 text-xs leading-relaxed text-stone-600">
+        <span className="font-semibold text-stone-800">Perioder for tallgrunnlaget:</span>{" "}
+        {periodSummary.length
+          ? `${periodSummary.join(", ")}. Periodene hentes automatisk fra kildene ved hver yield-oppdatering.`
+          : "Periodene blir tilgjengelige ved neste yield-oppdatering."}
+      </div>
+
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
           ? `Sist oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}`

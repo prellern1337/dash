@@ -4,7 +4,7 @@ export const config = { maxDuration: 60 };
 
 const BUILD = "dnb-fund-refresh-v1-2026-06-18";
 
-const FUNDS = [
+export const FUNDS = [
   {
     id: "dnb_teknologi_a",
     metricKey: "fund_dnb_teknologi_a",
@@ -164,7 +164,7 @@ function addCandidate(candidates, fund, value, date, source) {
   });
 }
 
-function latestCandidate(candidates) {
+export function latestCandidate(candidates) {
   return [...(candidates || [])]
     .sort((a, b) => {
       const dateDiff = dateToTime(a.date) - dateToTime(b.date);
@@ -316,7 +316,7 @@ async function fetchText(url, options = {}) {
       headers: {
         Accept: options.accept || "text/html,application/xhtml+xml,application/json,text/plain,*/*",
         "Accept-Language": options.language || "nb-NO,nb;q=0.9,en-US;q=0.8,en;q=0.7",
-        "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0; +https://vercel.app)",
+        "User-Agent": options.userAgent || "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0; +https://vercel.app)",
         "Cache-Control": "no-cache, no-store, max-age=0",
         Pragma: "no-cache",
         Expires: "0",
@@ -338,14 +338,17 @@ async function fetchJson(url) {
   return JSON.parse(text);
 }
 
-async function fetchAllCandidatesForFund(fund) {
+export async function fetchAllCandidatesForFund(fund) {
   const candidates = [];
   const diagnostics = [];
 
   for (const baseUrl of dnbCandidateUrls(fund)) {
-    const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}_=${Date.now()}`;
+    const url = baseUrl;
     try {
-      const html = await fetchText(url);
+      const html = await fetchText(url, {
+        accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+      });
       const found = parseDnbFundText(html, fund, baseUrl).map((candidate) => ({ ...candidate, fetchUrl: url }));
       candidates.push(...found);
       diagnostics.push({ source: "dnb", url: baseUrl, ok: true, candidates: found.map(slimCandidate) });

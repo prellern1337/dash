@@ -268,6 +268,32 @@ function hasNumericValue(value) {
   return value !== null && value !== undefined && value !== "" && Number.isFinite(Number(value));
 }
 
+function buildNicePercentAxis(values, step = 0.2, minPadding = 0.06) {
+  const numericValues = (values || []).map(Number).filter((value) => Number.isFinite(value));
+  const fallback = { domain: [0, 1], ticks: [0, 0.2, 0.4, 0.6, 0.8, 1] };
+  if (!numericValues.length || !Number.isFinite(step) || step <= 0) return fallback;
+
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const paddedMin = min - minPadding;
+  const paddedMax = max + minPadding;
+  let axisMin = Math.floor(paddedMin / step) * step;
+  let axisMax = Math.ceil(paddedMax / step) * step;
+
+  if (axisMin === axisMax) {
+    axisMin -= step;
+    axisMax += step;
+  }
+
+  const ticks = [];
+  const count = Math.round((axisMax - axisMin) / step);
+  for (let i = 0; i <= count; i += 1) {
+    ticks.push(Number((axisMin + i * step).toFixed(2)));
+  }
+
+  return { domain: [axisMin, axisMax], ticks };
+}
+
 function getFxDecimals(pairName) {
   return pairName === "SEK/NOK" ? 3 : 2;
 }
@@ -659,9 +685,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
     .map(Number);
 
   const allValues = values.length ? values : latestValues;
-  const min = allValues.length ? Math.min(...allValues) : 0;
-  const max = allValues.length ? Math.max(...allValues) : 1;
-  const padding = Math.max((max - min) * 0.18, 0.08);
+  const swapAxis = buildNicePercentAxis(allValues, 0.2, 0.06);
 
   return (
     <Overlay
@@ -706,7 +730,8 @@ function SwapOverlay({ currency, swapsState, onClose }) {
                 tickFormatter={(value) => formatSwapChartDate(value, data)}
               />
               <YAxis
-                domain={[min - padding, max + padding]}
+                domain={swapAxis.domain}
+                ticks={swapAxis.ticks}
                 tick={{ fontSize: 10, fill: "#57534e" }}
                 tickLine={false}
                 axisLine={false}

@@ -1,5 +1,10 @@
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { DNB_FUND_HISTORY } from "../lib/dnb-fund-history.js";
+import {
+  FUNDS as DNB_REFRESH_FUNDS,
+  fetchAllCandidatesForFund,
+  latestCandidate,
+} from "./dnb-fund-refresh.js";
 
 export const config = { maxDuration: 60 };
 
@@ -521,6 +526,37 @@ function dnbFundCandidateUrls(fund) {
 }
 
 async function fetchDnbFundCurrent(fund) {
+  const refreshFund = DNB_REFRESH_FUNDS.find((item) => item.metricKey === fund.metricKey);
+  if (!refreshFund) {
+    throw new Error(`Mangler DNB refresh-konfigurasjon for ${fund.name}.`);
+  }
+
+  const { candidates, diagnostics } = await fetchAllCandidatesForFund(refreshFund);
+  const current = latestCandidate(candidates);
+
+  if (!current) {
+    const failedSources = diagnostics
+      .filter((item) => !item.ok)
+      .map((item) => `${item.source}: ${item.error}`)
+      .join(" | ");
+    throw new Error(`Fant ikke oppdatert NAV/Kurs for ${fund.name}.${failedSources ? ` ${failedSources}` : ""}`);
+  }
+
+  return {
+    date: current.date,
+    open: null,
+    high: null,
+    low: null,
+    close: current.close,
+    volume: null,
+    sourceName: current.sourceName,
+    sourceUrl: current.sourceUrl,
+    sourceDocument: current.sourceDocument,
+    rawSource: current.rawSource,
+    forceInsert: true,
+    fetchUrl: current.fetchUrl,
+  };
+
   const errors = [];
 
   for (const baseUrl of dnbFundCandidateUrls(fund)) {

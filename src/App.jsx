@@ -919,15 +919,17 @@ function formatWorldCupTime(value) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("no-NO", {
+  const datePart = new Intl.DateTimeFormat("no-NO", {
     day: "2-digit",
     month: "2-digit",
     timeZone: "Europe/Oslo",
-  }).format(date).replace(/\.$/, "") + "     " + new Intl.DateTimeFormat("no-NO", {
+  }).format(date).replace(/\.$/, "");
+  const timePart = new Intl.DateTimeFormat("no-NO", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Oslo",
   }).format(date);
+  return `${datePart}\u00a0\u00a0\u00a0\u00a0-\u00a0\u00a0\u00a0\u00a0${timePart}`;
 }
 
 function ChannelBadge({ channel }) {
@@ -985,13 +987,13 @@ function WorldCupMatchRow({ match, mode = "upcoming", compact = false }) {
   const teams = match?.teams || [];
   return (
     <div className="rounded-2xl bg-stone-50 p-2.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex w-20 shrink-0 items-center justify-center gap-3">
+      <div className="grid grid-cols-[6rem_1fr_5rem] items-center gap-3">
+        <div className="flex shrink-0 items-center justify-center gap-3">
           <WorldCupTeam team={teams[0]} compact={compact} />
           <span className="text-[10px] font-semibold text-stone-300">–</span>
           <WorldCupTeam team={teams[1]} compact={compact} />
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 text-center">
           <div className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-400">{match?.phase || "VM"}</div>
           {mode === "upcoming" ? (
             <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{formatWorldCupTime(match?.date)}</div>
@@ -999,7 +1001,9 @@ function WorldCupMatchRow({ match, mode = "upcoming", compact = false }) {
             <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{match?.result || "—"}</div>
           )}
         </div>
-        {mode === "upcoming" && <ChannelBadge channel={match?.channel} />}
+        <div className="flex justify-end">
+          {mode === "upcoming" && <ChannelBadge channel={match?.channel} />}
+        </div>
       </div>
     </div>
   );

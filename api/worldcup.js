@@ -2,10 +2,72 @@ export const config = { maxDuration: 30 };
 
 const SCOREBOARD_URL = "https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260719&limit=200";
 const STANDINGS_URL = "https://site.web.api.espn.com/apis/v2/sports/soccer/fifa.world/standings?season=2026";
+const VG_SCHEDULE_URL = "https://vglive.vg.no/bff/vg/schedule";
+const VG_TV_CHANNELS_URL = "https://vglive.vg.no/bff/vg/events/tv-channels";
+const TEAM_ABBREVIATION_ALIASES = {
+  HAI: "HTI",
+};
 
 function statValue(stats = [], name, fallback = 0) {
   const stat = stats.find((item) => item.name === name || item.type === name);
   return stat?.displayValue ?? stat?.value ?? fallback;
+}
+
+function statNumber(stats = [], name, fallback = 0) {
+  const stat = stats.find((item) => item.name === name || item.type === name);
+  const raw = stat?.value ?? stat?.displayValue ?? fallback;
+  const number = Number(String(raw).replace("+", "").replace(",", "."));
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function normalizeToken(value) {
+  const token = String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]/gi, "")
+    .toUpperCase();
+  return TEAM_ABBREVIATION_ALIASES[token] || token;
+}
+
+function matchMinute(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 16);
+}
+
+function osloDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Oslo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function osloHour(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 12;
+  const hour = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Oslo",
+    hour: "2-digit",
+    hour12: false,
+  }).format(date);
+  return Number(hour);
+}
+
+function vgScheduleDateKeys(value) {
+  const dateKey = osloDateKey(value);
+  if (!dateKey) return [];
+  if (osloHour(value) >= 6) return [dateKey];
+  return [dateKey, osloDateKey(new Date(value).getTime() - 12 * 60 * 60 * 1000)].filter(Boolean);
+}
+
+function matchKey(date, abbreviations = []) {
+  return `${matchMinute(date)}|${abbreviations.map(normalizeToken).sort().join("-")}`;
 }
 
 function teamFromCompetitor(competitor) {
@@ -37,7 +99,13 @@ function phaseLabel(event) {
   return note.replace(/^FIFA World Cup,\s*/i, "") || "VM-kamp";
 }
 
-function channelForMatch(event, teams) {
+function displayChannelName(name) {
+  if (/tv\s*2/i.test(name)) return "TV 2";
+  if (/nrk/i.test(name)) return "NRK";
+  return name || "NRK/TV 2";
+}
+
+function fallbackChannelForMatch(event, teams) {
   const names = teams.map((team) => team.name.toLowerCase());
   const phase = phaseLabel(event).toLowerCase();
 
@@ -68,9 +136,80 @@ function normalizeEvent(event) {
     detail: status.shortDetail || status.detail || status.description || "",
     venue: competition.venue?.fullName || null,
     teams,
-    channel: channelForMatch(event, teams),
+    channel: fallbackChannelForMatch(event, teams),
     result: teams.every((team) => team.score !== null) ? `${teams[0]?.score ?? "—"}–${teams[1]?.score ?? "—"}` : null,
   };
+}
+
+async function fetchVgScheduleDate(dateKey) {
+  const url = `${VG_SCHEDULE_URL}?date=${encodeURIComponent(`${dateKey}T12:00:00+02:00`)}&sport=football`;
+  return fetchJson(url);
+}
+
+async function fetchVgTvChannels(eventIds) {
+  const ids = [...new Set(eventIds)].filter(Boolean);
+  if (!ids.length) return {};
+
+  const params = new URLSearchParams(ids.map((id) => ["eventIds", String(id)]));
+  const payload = await fetchJson(`${VG_TV_CHANNELS_URL}?${params.toString()}`);
+  return payload.tvChannels || {};
+}
+
+async function buildVgChannelMap(events, now = new Date()) {
+  const nextEvents = events
+    .filter((event) => !event.completed && new Date(event.date) >= now)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 20);
+  const dateKeys = [...new Set(nextEvents.flatMap((event) => vgScheduleDateKeys(event.date)).filter(Boolean))];
+  if (!dateKeys.length) return new Map();
+
+  const schedules = await Promise.allSettled(dateKeys.map(fetchVgScheduleDate));
+  const candidates = [];
+
+  for (const result of schedules) {
+    if (result.status !== "fulfilled") continue;
+    const payload = result.value || {};
+    const eventsById = payload.events || {};
+    const participants = payload.participants || {};
+
+    for (const event of Object.values(eventsById)) {
+      const tournamentName = event?.tournament?.stageName || "";
+      if (!/World Cup 2026/i.test(tournamentName)) continue;
+      const teams = (event.participantIds || []).map((id) => participants[id]).filter(Boolean);
+      candidates.push({
+        id: event.id,
+        key: matchKey(event.startDate, teams.map((team) => team.shortName || team.countryCode || team.name)),
+        hasTv: Number(event.coverageInfo?.assets?.tvChannelsCount || 0) > 0,
+      });
+    }
+  }
+
+  const tvByEventId = await fetchVgTvChannels(candidates.filter((event) => event.hasTv).map((event) => event.id));
+  const channelByMatch = new Map();
+
+  for (const event of candidates) {
+    const channel = tvByEventId[event.id]?.[0]?.name;
+    if (channel) {
+      channelByMatch.set(event.key, { name: displayChannelName(channel), confidence: "vg-live", rawName: channel });
+    }
+  }
+
+  return channelByMatch;
+}
+
+async function enrichEventsWithVgChannels(events, now = new Date()) {
+  try {
+    const channelByMatch = await buildVgChannelMap(events, now);
+    if (!channelByMatch.size) return events;
+
+    return events.map((event) => {
+      const key = matchKey(event.date, (event.teams || []).map((team) => team.abbreviation));
+      const channel = channelByMatch.get(key);
+      return channel ? { ...event, channel } : event;
+    });
+  } catch {
+    return events;
+  }
 }
 
 function phaseOrder(phase) {
@@ -111,7 +250,15 @@ function normalizeStandings(group) {
   return {
     id: group.id,
     name: String(group.name || group.abbreviation || "Group").replace("Group", "Gruppe"),
-    teams: (group.standings?.entries || []).map((entry, index) => ({
+    teams: (group.standings?.entries || [])
+      .slice()
+      .sort((a, b) => (
+        statNumber(b.stats, "points") - statNumber(a.stats, "points") ||
+        statNumber(b.stats, "pointDifferential") - statNumber(a.stats, "pointDifferential") ||
+        statNumber(b.stats, "pointsFor") - statNumber(a.stats, "pointsFor") ||
+        String(a.team?.displayName || "").localeCompare(String(b.team?.displayName || ""), "nb")
+      ))
+      .map((entry, index) => ({
       rank: index + 1,
       name: entry.team?.displayName || entry.team?.shortDisplayName || "Ukjent",
       abbreviation: entry.team?.abbreviation || "—",
@@ -153,7 +300,8 @@ export default async function handler(request, response) {
     ]);
 
     const now = new Date();
-    const events = (scoreboard.events || []).map(normalizeEvent).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const rawEvents = (scoreboard.events || []).map(normalizeEvent).sort((a, b) => new Date(a.date) - new Date(b.date));
+    const events = await enrichEventsWithVgChannels(rawEvents, now);
     const upcoming = events.filter((event) => !event.completed && new Date(event.date) >= now).slice(0, 6);
     const recent = events.filter((event) => event.completed).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
     const groups = (standings.children || []).map(normalizeStandings);

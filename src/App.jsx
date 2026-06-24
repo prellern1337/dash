@@ -922,6 +922,8 @@ function formatWorldCupTime(value) {
   return new Intl.DateTimeFormat("no-NO", {
     day: "2-digit",
     month: "2-digit",
+    timeZone: "Europe/Oslo",
+  }).format(date).replace(/\.$/, "") + "     " + new Intl.DateTimeFormat("no-NO", {
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Oslo",
@@ -1072,15 +1074,28 @@ function WorldCupOverlay({ worldCupState, onClose }) {
         <div className="text-sm font-semibold text-stone-900">Grupper</div>
         {(worldCupState.groups || []).map((group) => (
           <div key={group.id || group.name} className="overflow-hidden rounded-3xl border border-stone-100 bg-white">
-            <div className="flex items-center justify-between bg-stone-50 px-3 py-2">
-              <div className="text-sm font-semibold text-stone-900">{group.name}</div>
-              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">P · MF · V/U/T</div>
-            </div>
-            <table className="w-full text-xs">
+            <table className="w-full table-fixed text-xs">
+              <colgroup>
+                <col className="w-8" />
+                <col />
+                <col className="w-10" />
+                <col className="w-12" />
+                <col className="w-16" />
+              </colgroup>
+              <thead className="bg-stone-50">
+                <tr>
+                  <th colSpan={2} className="px-3 py-2 text-left text-sm font-semibold normal-case tracking-normal text-stone-900">
+                    {group.name}
+                  </th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">P</th>
+                  <th className="px-2 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">MF</th>
+                  <th className="px-3 py-2 text-right text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">V/U/T</th>
+                </tr>
+              </thead>
               <tbody>
                 {(group.teams || []).map((team) => (
                   <tr key={team.abbreviation} className="border-t border-stone-100">
-                    <td className="w-8 px-3 py-2 text-stone-400">{team.rank}</td>
+                    <td className="px-3 py-2 text-stone-400">{team.rank}</td>
                     <td className="py-2">
                       <div className="flex items-center gap-2">
                         {team.logo && <img src={team.logo} alt="" className="h-5 w-5 rounded-full object-cover ring-1 ring-black/5" />}

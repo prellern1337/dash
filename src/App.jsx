@@ -182,6 +182,7 @@ const fallbackWorldCupState = {
   upcoming: [],
   recent: [],
   groups: [],
+  knockoutRounds: [],
 };
 
 const fallbackIndices = {
@@ -577,9 +578,9 @@ function Overlay({ title, subtitle = "Detaljvisning", children, onClose, footer 
           initial={{ y: 18, scale: 0.98, opacity: 0 }}
           animate={{ y: 0, scale: 1, opacity: 1 }}
           exit={{ y: 12, scale: 0.98, opacity: 0 }}
-          className="max-h-[84vh] w-full max-w-md overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+          className="flex max-h-[84vh] w-full max-w-md flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
         >
-          <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
+          <div className="shrink-0 flex items-center justify-between border-b border-stone-100 px-5 py-4">
             <div>
               <div className="text-sm font-semibold text-stone-950">{title}</div>
               <div className="mt-0.5 text-xs leading-snug text-stone-400">{subtitle}</div>
@@ -593,8 +594,8 @@ function Overlay({ title, subtitle = "Detaljvisning", children, onClose, footer 
               <X size={18} />
             </button>
           </div>
-          <div className="p-5">{children}</div>
-          {footer && <div className="border-t border-stone-100 px-5 py-4">{footer}</div>}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5">{children}</div>
+          {footer && <div className="shrink-0 border-t border-stone-100 px-5 py-4">{footer}</div>}
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -1043,7 +1044,32 @@ function WorldCupOverlay({ worldCupState, onClose }) {
         Kamper og tabeller hentes fra ESPN. Norsk TV-fordeling vises med kjente NRK/TV 2-regler og kan kompletteres fra VG Live når full maskinlesbar kanaldata er tilgjengelig.
       </div>
 
+      {(worldCupState.knockoutRounds || []).length > 0 && (
+        <div className="mb-4 grid gap-3">
+          <div className="text-sm font-semibold text-stone-900">Sluttspill</div>
+          {(worldCupState.knockoutRounds || []).map((round) => (
+            <div key={round.phase} className="overflow-hidden rounded-3xl border border-stone-100 bg-white">
+              <div className="flex items-center justify-between bg-stone-50 px-3 py-2">
+                <div className="text-sm font-semibold text-stone-900">{round.phase}</div>
+                <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">{round.matches?.length || 0} kamper</div>
+              </div>
+              <div className="grid gap-1.5 p-2">
+                {(round.matches || []).map((match) => (
+                  <WorldCupMatchRow
+                    key={match.id}
+                    match={match}
+                    mode={match.completed ? "recent" : "upcoming"}
+                    compact
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
       <div className="grid gap-3">
+        <div className="text-sm font-semibold text-stone-900">Grupper</div>
         {(worldCupState.groups || []).map((group) => (
           <div key={group.id || group.name} className="overflow-hidden rounded-3xl border border-stone-100 bg-white">
             <div className="flex items-center justify-between bg-stone-50 px-3 py-2">
@@ -1658,6 +1684,7 @@ export default function MarketDashboardPrototype() {
             upcoming: payload.upcoming || [],
             recent: payload.recent || [],
             groups: payload.groups || [],
+            knockoutRounds: payload.knockoutRounds || [],
           });
         }
       } catch (error) {

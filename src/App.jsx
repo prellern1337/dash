@@ -454,7 +454,7 @@ function Pill({ children, tone = "neutral" }) {
   );
 }
 
-function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, onClick, source, size = "standard", wide = false }) {
+function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, onClick, source, size = "standard", wide = false, theme = "light" }) {
   const heightClasses = {
     standard: "min-h-36",
     large: "min-h-48",
@@ -478,35 +478,36 @@ function Tile({ title, subtitle, value, unit, icon, accent = "slate", children, 
     rose: "bg-rose-100 text-rose-700",
     cyan: "bg-cyan-100 text-cyan-700",
   };
+  const dark = theme === "dark";
 
   return (
     <motion.button
       type="button"
       whileTap={{ scale: onClick ? 0.985 : 1 }}
       onClick={onClick}
-      className={`${wide ? "col-span-2" : ""} rounded-[1.65rem] bg-white p-4 text-left shadow-sm ring-1 ring-black/[0.04] ${heightClasses[size]} ${
+      className={`${wide ? "col-span-2" : ""} rounded-[1.65rem] p-4 text-left ${dark ? "bg-stone-950 text-white shadow-lg shadow-stone-950/15 ring-1 ring-white/10" : "bg-white shadow-sm ring-1 ring-black/[0.04]"} ${heightClasses[size]} ${
         onClick ? "cursor-pointer active:shadow-none" : "cursor-default"
       }`}
     >
       <div className="flex min-h-full flex-col justify-between gap-4">
         <div className="flex items-start justify-between gap-2">
-          <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${accentClasses[accent]}`}>
+          <div className={`flex h-9 w-9 items-center justify-center rounded-2xl ${dark ? "bg-amber-300 text-stone-950" : accentClasses[accent]}`}>
             {icon}
           </div>
           <div className="text-right">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em] text-stone-400">{title}</div>
-            {source && <div className="mt-0.5 text-[10px] text-stone-400">{source}</div>}
+            <div className={`text-[11px] font-semibold uppercase tracking-[0.12em] ${dark ? "text-white/70" : "text-stone-400"}`}>{title}</div>
+            {source && <div className={`mt-0.5 text-[10px] ${dark ? "text-white/45" : "text-stone-400"}`}>{source}</div>}
           </div>
         </div>
 
         <div className={contentPaddingClasses[size]}>
           {value && (
             <div className="flex items-end gap-1">
-              <span className="text-[1.55rem] font-semibold tracking-[-0.04em] text-stone-950">{value}</span>
+              <span className={`text-[1.55rem] font-semibold tracking-[-0.04em] ${dark ? "text-white" : "text-stone-950"}`}>{value}</span>
               {unit && <span className="pb-1 text-xs font-medium text-stone-400">{unit}</span>}
             </div>
           )}
-          {subtitle && <div className="mt-1 text-xs leading-snug text-stone-500">{subtitle}</div>}
+          {subtitle && <div className={`mt-1 text-xs leading-snug ${dark ? "text-white/60" : "text-stone-500"}`}>{subtitle}</div>}
           {children}
         </div>
       </div>
@@ -542,15 +543,18 @@ function SwapChangeBadge({ changeBps }) {
 function RateStack({ rows }) {
   return (
     <div className="mt-2 space-y-1.5">
-      {rows.map((row) => (
-        <div key={row.label} className="grid grid-cols-[26px_minmax(0,1fr)_38px] items-center gap-1 rounded-xl bg-stone-50 px-2 py-1.5">
-          <span className="text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
-          <span className="min-w-0 text-right text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
-            <span className="whitespace-nowrap">{row.value}</span>
-          </span>
-          <SwapChangeBadge changeBps={row.changeBps} />
-        </div>
-      ))}
+      {rows.map((row) => {
+        const hasChange = Object.prototype.hasOwnProperty.call(row, "changeBps");
+        return (
+          <div key={row.label} className={`grid ${hasChange ? "grid-cols-[26px_minmax(0,1fr)_38px]" : "grid-cols-[minmax(0,1fr)_auto]"} items-center gap-2 rounded-xl bg-stone-50 px-2 py-1.5`}>
+            <span className="text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
+            <span className="min-w-0 text-right text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
+              <span className="whitespace-nowrap">{row.value}</span>
+            </span>
+            {hasChange && <SwapChangeBadge changeBps={row.changeBps} />}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -951,7 +955,7 @@ function ChannelBadge({ channel }) {
 
 function WorldCupBrandHeader() {
   return (
-    <div className="relative isolate overflow-hidden rounded-[1.35rem] bg-stone-950 px-4 py-3 text-white shadow-sm">
+    <div className="relative isolate overflow-hidden rounded-[1.35rem] bg-white/[0.07] px-4 py-3 text-white shadow-sm ring-1 ring-white/10">
       <div className="absolute -right-3 -top-8 -z-10 text-[6.5rem] font-black leading-none tracking-[-0.12em] text-white/10">26</div>
       <div className="absolute -bottom-10 left-2 -z-10 text-[5.75rem] font-black leading-none tracking-[-0.12em] text-white/10">26</div>
       <div className="flex items-center justify-between gap-3">
@@ -970,33 +974,35 @@ function WorldCupBrandHeader() {
   );
 }
 
-function WorldCupTeam({ team, compact = false }) {
+function WorldCupTeam({ team, compact = false, tone = "light" }) {
+  const dark = tone === "dark";
   return (
-    <div className="flex min-w-0 flex-col items-center">
+    <div className={`flex min-w-0 flex-col items-center ${dark ? "[&_*]:!text-white/85" : ""}`}>
       {team?.logo ? (
-        <img src={team.logo} alt="" className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full object-cover ring-1 ring-black/5`} />
+        <img src={team.logo} alt="" className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full object-cover ring-1 ${dark ? "ring-white/20" : "ring-black/5"}`} />
       ) : (
-        <div className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full bg-stone-100`} />
+        <div className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full ${dark ? "bg-white/15" : "bg-stone-100"}`} />
       )}
       <div className={`${compact ? "text-[9px]" : "text-[10px]"} mt-1 font-bold text-stone-800`}>{team?.abbreviation || "—"}</div>
     </div>
   );
 }
 
-function WorldCupMatchRow({ match, mode = "upcoming", compact = false }) {
+function WorldCupMatchRow({ match, mode = "upcoming", compact = false, tone = "light" }) {
   const teams = match?.teams || [];
+  const dark = tone === "dark";
   return (
-    <div className="rounded-2xl bg-stone-50 p-2.5">
+    <div className={`rounded-2xl p-2.5 ${dark ? "bg-white/[0.07] ring-1 ring-white/10" : "bg-stone-50"}`}>
       <div className="grid grid-cols-[6rem_1fr_5rem] items-center gap-3">
         <div className="flex shrink-0 items-center justify-center gap-3">
-          <WorldCupTeam team={teams[0]} compact={compact} />
+          <WorldCupTeam team={teams[0]} compact={compact} tone={tone} />
           <span className="text-[10px] font-semibold text-stone-300">–</span>
-          <WorldCupTeam team={teams[1]} compact={compact} />
+          <WorldCupTeam team={teams[1]} compact={compact} tone={tone} />
         </div>
-        <div className="min-w-0 text-center">
-          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-400">{match?.phase || "VM"}</div>
+        <div className={`min-w-0 text-center ${dark ? "[&_*]:!text-white/90" : ""}`}>
+          <div className={`truncate text-[10px] font-semibold uppercase tracking-[0.08em] ${dark ? "text-amber-200/75" : "text-stone-400"}`}>{match?.phase || "VM"}</div>
           {mode === "upcoming" ? (
-            <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{formatWorldCupTime(match?.date)}</div>
+            <div className={`mt-0.5 text-xs font-semibold tabular-nums ${dark ? "text-white/90" : "text-stone-800"}`}>{formatWorldCupTime(match?.date)}</div>
           ) : (
             <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{match?.result || "—"}</div>
           )}
@@ -1017,29 +1023,30 @@ function WorldCupTile({ worldCupState, onClick }) {
     <Tile
       title="VM 2026"
       source={worldCupState.status === "loading" ? "Henter" : "ESPN / VG"}
-      accent="emerald"
+      accent="amber"
       icon={<Trophy size={17} />}
       size="insider"
       wide
+      theme="dark"
       onClick={onClick}
     >
       <div className="mt-2 grid gap-3">
         <WorldCupBrandHeader />
         <div>
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Neste kamper</div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">Neste kamper</div>
           <div className="grid gap-1.5">
             {upcoming.length ? upcoming.slice(0, 6).map((match) => (
-              <WorldCupMatchRow key={match.id} match={match} mode="upcoming" compact />
+              <WorldCupMatchRow key={match.id} match={match} mode="upcoming" compact tone="dark" />
             )) : (
-              <div className="rounded-2xl bg-stone-50 p-3 text-xs text-stone-500">Ingen kommende kamper funnet.</div>
+              <div className="rounded-2xl bg-white/[0.07] p-3 text-xs text-white/60 ring-1 ring-white/10">Ingen kommende kamper funnet.</div>
             )}
           </div>
         </div>
         <div>
-          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Siste resultater</div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-white/55">Siste resultater</div>
           <div className="grid gap-1.5">
             {recent.length ? recent.slice(0, 6).map((match) => (
-              <WorldCupMatchRow key={match.id} match={match} mode="recent" compact />
+              <WorldCupMatchRow key={match.id} match={match} mode="recent" compact tone="dark" />
             )) : (
               <div className="rounded-2xl bg-stone-50 p-3 text-xs text-stone-500">Ingen resultater ennå.</div>
             )}

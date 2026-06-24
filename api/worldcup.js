@@ -26,9 +26,9 @@ function phaseLabel(event) {
   const group = note.match(/Group\s+([A-L])/i);
   if (group) return `Gruppe ${group[1].toUpperCase()}`;
 
-  const seasonName = event?.leagues?.[0]?.season?.type?.name || event?.season?.slug || "";
+  const seasonName = `${event?.leagues?.[0]?.season?.type?.name || ""} ${event?.season?.slug || ""} ${note}`;
   const clean = String(seasonName).toLowerCase();
-  if (clean.includes("round of 32")) return "16.delsfinale";
+  if (clean.includes("round of 32") || clean.includes("round-of-32")) return "16.delsfinale";
   if (clean.includes("round of 16")) return "Åttedelsfinale";
   if (clean.includes("quarter")) return "Kvartfinale";
   if (clean.includes("semi")) return "Semifinale";
@@ -71,6 +71,40 @@ function normalizeEvent(event) {
     channel: channelForMatch(event, teams),
     result: teams.every((team) => team.score !== null) ? `${teams[0]?.score ?? "—"}–${teams[1]?.score ?? "—"}` : null,
   };
+}
+
+function phaseOrder(phase) {
+  const order = {
+    "16.delsfinale": 1,
+    "Ã…ttedelsfinale": 2,
+    Kvartfinale: 3,
+    Semifinale: 4,
+    Bronsefinale: 5,
+    Finale: 6,
+  };
+
+  return order[phase] || 99;
+}
+
+function buildKnockoutRounds(events, now = new Date()) {
+  const rounds = new Map();
+
+  for (const event of events) {
+    if (!event.phase || event.phase.startsWith("Gruppe")) continue;
+    if (!rounds.has(event.phase)) rounds.set(event.phase, []);
+    rounds.get(event.phase).push(event);
+  }
+
+  return Array.from(rounds.entries())
+    .map(([phase, matches]) => ({
+      phase,
+      matches: matches.sort((a, b) => new Date(a.date) - new Date(b.date)),
+    }))
+    .filter((round) => {
+      const firstMatchAt = new Date(round.matches[0]?.date || "");
+      return !Number.isNaN(firstMatchAt.getTime()) && firstMatchAt <= now;
+    })
+    .sort((a, b) => phaseOrder(a.phase) - phaseOrder(b.phase));
 }
 
 function normalizeStandings(group) {
@@ -123,6 +157,7 @@ export default async function handler(request, response) {
     const upcoming = events.filter((event) => !event.completed && new Date(event.date) >= now).slice(0, 6);
     const recent = events.filter((event) => event.completed).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
     const groups = (standings.children || []).map(normalizeStandings);
+    const knockoutRounds = buildKnockoutRounds(events, now);
 
     response.setHeader("Cache-Control", "s-maxage=300, stale-while-revalidate=600");
     response.status(200).json({
@@ -134,6 +169,7 @@ export default async function handler(request, response) {
       upcoming,
       recent,
       groups,
+      knockoutRounds,
     });
   } catch (error) {
     response.setHeader("Cache-Control", "no-store, max-age=0");
@@ -145,6 +181,7 @@ export default async function handler(request, response) {
       upcoming: [],
       recent: [],
       groups: [],
+      knockoutRounds: [],
     });
   }
 }

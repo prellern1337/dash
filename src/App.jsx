@@ -12,6 +12,7 @@ import {
   ExternalLink,
   LineChart as LineChartIcon,
   Newspaper,
+  Trophy,
   TrendingUp,
   X,
 } from "lucide-react";
@@ -169,6 +170,18 @@ const fallbackNewsState = {
   message: null,
   errors: [],
   items: [],
+};
+
+const fallbackWorldCupState = {
+  status: "loading",
+  sourceName: "ESPN / VG",
+  sourceUrl: "https://www.espn.com/soccer/fixtures/_/league/fifa.world",
+  tvSourceUrl: "https://www.vg.no/sport/i/wrn611/fotball-vm-2026-program",
+  fetchedAt: null,
+  message: null,
+  upcoming: [],
+  recent: [],
+  groups: [],
 };
 
 const fallbackIndices = {
@@ -901,6 +914,173 @@ function NewsFeedTable({ items = [], compact = false }) {
   );
 }
 
+function formatWorldCupTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("no-NO", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Oslo",
+  }).format(date);
+}
+
+function ChannelBadge({ channel }) {
+  const name = channel?.name || "NRK/TV 2";
+  const isTv2 = name.includes("TV 2") && !name.includes("/");
+  const isUnknown = channel?.confidence === "pending";
+  const cls = isTv2
+    ? "bg-blue-600 text-white"
+    : isUnknown
+      ? "bg-stone-100 text-stone-600 ring-1 ring-stone-200"
+      : "bg-stone-950 text-white";
+
+  return (
+    <span className={`inline-flex h-6 min-w-11 items-center justify-center rounded-lg px-2 text-[10px] font-black tracking-[-0.03em] ${cls}`}>
+      {name}
+    </span>
+  );
+}
+
+function WorldCupTeam({ team, compact = false }) {
+  return (
+    <div className="flex min-w-0 flex-col items-center">
+      {team?.logo ? (
+        <img src={team.logo} alt="" className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full object-cover ring-1 ring-black/5`} />
+      ) : (
+        <div className={`${compact ? "h-5 w-5" : "h-6 w-6"} rounded-full bg-stone-100`} />
+      )}
+      <div className={`${compact ? "text-[9px]" : "text-[10px]"} mt-1 font-bold text-stone-800`}>{team?.abbreviation || "—"}</div>
+    </div>
+  );
+}
+
+function WorldCupMatchRow({ match, mode = "upcoming", compact = false }) {
+  const teams = match?.teams || [];
+  return (
+    <div className="rounded-2xl bg-stone-50 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex w-20 shrink-0 items-center justify-center gap-3">
+          <WorldCupTeam team={teams[0]} compact={compact} />
+          <span className="text-[10px] font-semibold text-stone-300">–</span>
+          <WorldCupTeam team={teams[1]} compact={compact} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[10px] font-semibold uppercase tracking-[0.08em] text-stone-400">{match?.phase || "VM"}</div>
+          {mode === "upcoming" ? (
+            <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{formatWorldCupTime(match?.date)}</div>
+          ) : (
+            <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{match?.result || "—"}</div>
+          )}
+        </div>
+        {mode === "upcoming" && <ChannelBadge channel={match?.channel} />}
+      </div>
+    </div>
+  );
+}
+
+function WorldCupTile({ worldCupState, onClick }) {
+  const upcoming = worldCupState.upcoming || [];
+  const recent = worldCupState.recent || [];
+
+  return (
+    <Tile
+      title="VM 2026"
+      source={worldCupState.status === "loading" ? "Henter" : "ESPN / VG"}
+      accent="emerald"
+      icon={<Trophy size={17} />}
+      size="insider"
+      wide
+      onClick={onClick}
+    >
+      <div className="mt-2 grid gap-3">
+        <div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Neste kamper</div>
+          <div className="grid gap-1.5">
+            {upcoming.length ? upcoming.slice(0, 6).map((match) => (
+              <WorldCupMatchRow key={match.id} match={match} mode="upcoming" compact />
+            )) : (
+              <div className="rounded-2xl bg-stone-50 p-3 text-xs text-stone-500">Ingen kommende kamper funnet.</div>
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Siste resultater</div>
+          <div className="grid gap-1.5">
+            {recent.length ? recent.slice(0, 6).map((match) => (
+              <WorldCupMatchRow key={match.id} match={match} mode="recent" compact />
+            )) : (
+              <div className="rounded-2xl bg-stone-50 p-3 text-xs text-stone-500">Ingen resultater ennå.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </Tile>
+  );
+}
+
+function WorldCupOverlay({ worldCupState, onClose }) {
+  return (
+    <Overlay
+      title="VM 2026"
+      subtitle="Grupper og tabeller"
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={worldCupState.sourceUrl || "https://www.espn.com/soccer/fixtures/_/league/fifa.world"}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Åpne kampdata
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
+        Kamper og tabeller hentes fra ESPN. Norsk TV-fordeling vises med kjente NRK/TV 2-regler og kan kompletteres fra VG Live når full maskinlesbar kanaldata er tilgjengelig.
+      </div>
+
+      <div className="grid gap-3">
+        {(worldCupState.groups || []).map((group) => (
+          <div key={group.id || group.name} className="overflow-hidden rounded-3xl border border-stone-100 bg-white">
+            <div className="flex items-center justify-between bg-stone-50 px-3 py-2">
+              <div className="text-sm font-semibold text-stone-900">{group.name}</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-stone-400">P · MF · V/U/T</div>
+            </div>
+            <table className="w-full text-xs">
+              <tbody>
+                {(group.teams || []).map((team) => (
+                  <tr key={team.abbreviation} className="border-t border-stone-100">
+                    <td className="w-8 px-3 py-2 text-stone-400">{team.rank}</td>
+                    <td className="py-2">
+                      <div className="flex items-center gap-2">
+                        {team.logo && <img src={team.logo} alt="" className="h-5 w-5 rounded-full object-cover ring-1 ring-black/5" />}
+                        <div>
+                          <div className="font-semibold text-stone-800">{team.abbreviation}</div>
+                          <div className="text-[10px] text-stone-400">{team.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-right font-semibold tabular-nums text-stone-950">{team.points}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-stone-600">{team.goalDifference}</td>
+                    <td className="px-3 py-2 text-right tabular-nums text-stone-600">
+                      {team.wins}/{team.draws}/{team.losses}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </Overlay>
+  );
+}
+
+
 function NewsFeedTile({ newsState, onClick }) {
   const rows = newsState.items || [];
 
@@ -1404,8 +1584,10 @@ export default function MarketDashboardPrototype() {
   const [showInsiderTrades, setShowInsiderTrades] = useState(false);
   const [showNewsFeed, setShowNewsFeed] = useState(false);
   const [showYield, setShowYield] = useState(false);
+  const [showWorldCup, setShowWorldCup] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
+  const [worldCupState, setWorldCupState] = useState(fallbackWorldCupState);
   const [indicesState, setIndicesState] = useState(fallbackIndices);
   const [watchlistState, setWatchlistState] = useState(fallbackWatchlist);
   const [realEstateWatchlistState, setRealEstateWatchlistState] = useState(fallbackRealEstateWatchlist);
@@ -1451,6 +1633,39 @@ export default function MarketDashboardPrototype() {
             ...current,
             status: "error",
             message: error instanceof Error ? error.message : "Kunne ikke hente nyhetsfeed.",
+          }));
+        }
+      }
+    }
+
+    async function loadWorldCup() {
+      try {
+        const response = await fetch(`/api/worldcup?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente VM-data.");
+        }
+
+        if (!cancelled) {
+          setWorldCupState({
+            status: payload.status || "ok",
+            sourceName: payload.sourceName || "ESPN / VG",
+            sourceUrl: payload.sourceUrl || fallbackWorldCupState.sourceUrl,
+            tvSourceUrl: payload.tvSourceUrl || fallbackWorldCupState.tvSourceUrl,
+            fetchedAt: payload.fetchedAt || null,
+            message: payload.message || null,
+            upcoming: payload.upcoming || [],
+            recent: payload.recent || [],
+            groups: payload.groups || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWorldCupState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente VM-data.",
           }));
         }
       }
@@ -1713,6 +1928,7 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    loadWorldCup();
     loadNews();
     loadInsiderTrades();
     loadSwaps();
@@ -1730,16 +1946,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = newsState.status === "error" || insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = worldCupState.status === "error" || newsState.status === "error" || insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -1778,6 +1994,13 @@ export default function MarketDashboardPrototype() {
       return {
         title: "Nyhetsfeed feilet",
         message: newsState.message || "Kunne ikke lese nyhetsfeed.",
+      };
+    }
+
+    if (worldCupState.status === "error") {
+      return {
+        title: "VM-data feilet",
+        message: worldCupState.message || "Kunne ikke lese VM-kamper og grupper.",
       };
     }
 
@@ -1881,6 +2104,8 @@ export default function MarketDashboardPrototype() {
 
     return null;
   }, [
+    worldCupState.status,
+    worldCupState.message,
     swapsState.status,
     swapsState.message,
     fxState.status,
@@ -1953,11 +2178,13 @@ export default function MarketDashboardPrototype() {
           )}
         </AnimatePresence>
 
-        <section className="mb-3">
-          <h2 className="text-sm font-semibold text-stone-800">Renter, valuta & yield</h2>
-        </section>
-
         <main className="grid grid-cols-2 gap-3">
+          <WorldCupTile worldCupState={worldCupState} onClick={() => setShowWorldCup(true)} />
+
+          <div className="col-span-2 mt-1">
+            <h2 className="text-sm font-semibold text-stone-800">Renter, valuta & yield</h2>
+          </div>
+
           <Tile title="SWAP NOK" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
             <RateStack
               rows={[
@@ -2118,6 +2345,7 @@ export default function MarketDashboardPrototype() {
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showNewsFeed && <NewsFeedOverlay newsState={newsState} onClose={() => setShowNewsFeed(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
+      {showWorldCup && <WorldCupOverlay worldCupState={worldCupState} onClose={() => setShowWorldCup(false)} />}
     </div>
   );
 }

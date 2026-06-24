@@ -947,6 +947,27 @@ function ChannelBadge({ channel }) {
   );
 }
 
+function WorldCupBrandHeader() {
+  return (
+    <div className="relative isolate overflow-hidden rounded-[1.35rem] bg-stone-950 px-4 py-3 text-white shadow-sm">
+      <div className="absolute -right-3 -top-8 -z-10 text-[6.5rem] font-black leading-none tracking-[-0.12em] text-white/10">26</div>
+      <div className="absolute -bottom-10 left-2 -z-10 text-[5.75rem] font-black leading-none tracking-[-0.12em] text-white/10">26</div>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">FIFA World Cup</div>
+          <div className="mt-0.5 flex items-end gap-2">
+            <span className="text-4xl font-black leading-none tracking-[-0.13em] text-white">26</span>
+            <span className="pb-1 text-xs font-black uppercase leading-none tracking-[0.18em] text-white/90">VM 2026</span>
+          </div>
+        </div>
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-b from-amber-200 via-amber-400 to-amber-700 text-stone-950 shadow-lg shadow-amber-950/30 ring-1 ring-white/20">
+          <Trophy size={25} strokeWidth={2.4} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WorldCupTeam({ team, compact = false }) {
   return (
     <div className="flex min-w-0 flex-col items-center">
@@ -999,6 +1020,7 @@ function WorldCupTile({ worldCupState, onClick }) {
       onClick={onClick}
     >
       <div className="mt-2 grid gap-3">
+        <WorldCupBrandHeader />
         <div>
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-stone-400">Neste kamper</div>
           <div className="grid gap-1.5">

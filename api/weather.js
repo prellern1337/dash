@@ -2,10 +2,10 @@ export const config = { maxDuration: 10 };
 
 const MET_LOCATIONFORECAST_URL = "https://api.met.no/weatherapi/locationforecast/2.0/compact";
 const DEFAULT_LOCATION = {
-  name: "Oslo",
-  lat: 59.9139,
-  lon: 10.7522,
-  altitude: 23,
+  name: "Aker Brygge",
+  lat: 59.9099,
+  lon: 10.7275,
+  altitude: 3,
 };
 
 function numberOrNull(value) {

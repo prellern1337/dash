@@ -8,6 +8,7 @@ import {
   BriefcaseBusiness,
   Building2,
   CircleDollarSign,
+  CloudSun,
   Clock3,
   ExternalLink,
   LineChart as LineChartIcon,
@@ -183,6 +184,17 @@ const fallbackWorldCupState = {
   recent: [],
   groups: [],
   knockoutRounds: [],
+};
+
+const fallbackWeatherState = {
+  status: "loading",
+  sourceName: "MET Norway",
+  sourceUrl: "https://api.met.no/weatherapi/locationforecast/2.0/documentation",
+  fetchedAt: null,
+  updatedAt: null,
+  message: null,
+  location: { name: "Oslo" },
+  days: [],
 };
 
 const fallbackIndices = {
@@ -953,6 +965,118 @@ function ChannelBadge({ channel }) {
   );
 }
 
+function formatWeatherTemp(value) {
+  if (!Number.isFinite(Number(value))) return "—";
+  return `${Math.round(Number(value))}°`;
+}
+
+function formatWeatherWind(value) {
+  if (!Number.isFinite(Number(value))) return "—";
+  return `${Math.round(Number(value))} m/s`;
+}
+
+function WeatherDayRow({ day }) {
+  const periods = day?.periods || {};
+  return (
+    <div className="grid grid-cols-[5.5rem_repeat(3,minmax(0,1fr))_4.5rem_3.5rem] items-center gap-2 rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-sky-100/80">
+      <div className="text-lg font-semibold tracking-[-0.04em] text-stone-950">{day?.label || "—"}</div>
+      {[periods.morning, periods.afternoon, periods.evening].map((period, index) => (
+        <div key={`${day?.date}-${index}`} className="flex justify-center text-2xl" title={period?.condition || ""}>
+          {period?.icon || "—"}
+        </div>
+      ))}
+      <div className="whitespace-nowrap text-right text-base font-semibold tabular-nums text-red-600">
+        {formatWeatherTemp(day?.high)} <span className="text-stone-300">/</span> {formatWeatherTemp(day?.low)}
+      </div>
+      <div className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">{formatWeatherWind(day?.wind)}</div>
+    </div>
+  );
+}
+
+function WeatherTile({ weatherState, onClick }) {
+  const days = weatherState.days || [];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="col-span-2 rounded-[1.65rem] bg-sky-50 p-3 text-left shadow-sm ring-1 ring-sky-100"
+    >
+      <div className="mb-2 grid grid-cols-[5.5rem_repeat(3,minmax(0,1fr))_4.5rem_3.5rem] gap-2 px-3 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+        <span />
+        <span>Morgen</span>
+        <span>Ettermiddag</span>
+        <span>Kveld</span>
+        <span>Høy/lav</span>
+        <span>Vind</span>
+      </div>
+      <div className="grid gap-2">
+        {days.length ? days.slice(0, 2).map((day) => <WeatherDayRow key={day.date || day.label} day={day} />) : (
+          <div className="rounded-2xl bg-white p-4 text-sm text-stone-500 ring-1 ring-sky-100">
+            {weatherState.status === "loading" ? "Henter værdata..." : weatherState.message || "Ingen værdata tilgjengelig."}
+          </div>
+        )}
+      </div>
+      <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-400">
+        <span className="inline-flex items-center gap-1"><CloudSun size={12} /> {weatherState.location?.name || "Oslo"}</span>
+        <span>{weatherState.status === "loading" ? "Oppdaterer" : `Oppdatert: ${formatDateTimeShort(weatherState.updatedAt || weatherState.fetchedAt)}`}</span>
+      </div>
+    </button>
+  );
+}
+
+function WeatherHourlyTable({ day }) {
+  const rows = (day?.hourly || []).filter((point) => point.hour >= 6 && point.hour <= 23);
+  return (
+    <div className="rounded-[2rem] bg-white p-5 shadow-sm ring-1 ring-sky-100">
+      <div className="mb-4 text-center text-2xl font-semibold tracking-[-0.05em] text-stone-950">{day?.label || "—"}</div>
+      <div className="grid grid-cols-[3rem_1fr_4rem] border-b border-sky-100 pb-2 text-xs font-semibold text-slate-500">
+        <span>Tid</span>
+        <span className="text-center">Vær</span>
+        <span className="text-right">Temp.</span>
+      </div>
+      <div className="divide-y divide-sky-100">
+        {rows.map((point) => (
+          <div key={point.time} className="grid grid-cols-[3rem_1fr_4rem] items-center py-2 text-sm">
+            <span className="font-semibold tabular-nums text-slate-700">{String(point.hour).padStart(2, "0")}</span>
+            <span className="text-center text-2xl" title={point.condition}>{point.icon}</span>
+            <span className="text-right font-semibold tabular-nums text-red-600">{formatWeatherTemp(point.temperature)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function WeatherOverlay({ weatherState, onClose }) {
+  const days = weatherState.days || [];
+  return (
+    <Overlay
+      title="Vær"
+      subtitle={`${weatherState.location?.name || "Oslo"} · i dag og i morgen`}
+      onClose={onClose}
+      footer={
+        <a
+          className="flex items-center justify-between text-sm font-medium text-stone-700"
+          href={weatherState.sourceUrl || fallbackWeatherState.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Data fra MET Norway
+          <ExternalLink size={16} />
+        </a>
+      }
+    >
+      <div className="rounded-[2.5rem] bg-sky-50 p-3">
+        <div className="grid gap-3 md:grid-cols-2">
+          {days.slice(0, 2).map((day) => <WeatherHourlyTable key={day.date || day.label} day={day} />)}
+        </div>
+      </div>
+      {weatherState.message && <div className="mt-3 rounded-2xl bg-amber-50 p-3 text-xs text-amber-700">{weatherState.message}</div>}
+    </Overlay>
+  );
+}
+
 function WorldCupBrandHeader() {
   return (
     <div className="relative isolate overflow-hidden rounded-[1.35rem] bg-white/[0.07] px-4 py-3 text-white shadow-sm ring-1 ring-white/10">
@@ -1659,8 +1783,10 @@ export default function MarketDashboardPrototype() {
   const [showNewsFeed, setShowNewsFeed] = useState(false);
   const [showYield, setShowYield] = useState(false);
   const [showWorldCup, setShowWorldCup] = useState(false);
+  const [showWeather, setShowWeather] = useState(false);
   const [showWarning, setShowWarning] = useState(true);
   const [insiderState, setInsiderState] = useState(fallbackInsiderTrades);
+  const [weatherState, setWeatherState] = useState(fallbackWeatherState);
   const [worldCupState, setWorldCupState] = useState(fallbackWorldCupState);
   const [indicesState, setIndicesState] = useState(fallbackIndices);
   const [watchlistState, setWatchlistState] = useState(fallbackWatchlist);
@@ -1707,6 +1833,38 @@ export default function MarketDashboardPrototype() {
             ...current,
             status: "error",
             message: error instanceof Error ? error.message : "Kunne ikke hente nyhetsfeed.",
+          }));
+        }
+      }
+    }
+
+    async function loadWeather() {
+      try {
+        const response = await fetch(`/api/weather?ts=${Date.now()}`, { cache: "no-store" });
+        const payload = await response.json();
+
+        if (!response.ok || payload.status === "error") {
+          throw new Error(payload.message || "Kunne ikke hente værdata.");
+        }
+
+        if (!cancelled) {
+          setWeatherState({
+            status: payload.status || "ok",
+            sourceName: payload.sourceName || "MET Norway",
+            sourceUrl: payload.sourceUrl || fallbackWeatherState.sourceUrl,
+            fetchedAt: payload.fetchedAt || null,
+            updatedAt: payload.updatedAt || payload.fetchedAt || null,
+            message: payload.message || null,
+            location: payload.location || fallbackWeatherState.location,
+            days: payload.days || [],
+          });
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setWeatherState((current) => ({
+            ...current,
+            status: "error",
+            message: error instanceof Error ? error.message : "Kunne ikke hente værdata.",
           }));
         }
       }
@@ -2003,6 +2161,7 @@ export default function MarketDashboardPrototype() {
       }
     }
 
+    loadWeather();
     loadWorldCup();
     loadNews();
     loadInsiderTrades();
@@ -2021,16 +2180,16 @@ export default function MarketDashboardPrototype() {
   }, []);
 
   const latestFetchedAt = useMemo(() => {
-    const dates = [worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
+    const dates = [weatherState.fetchedAt, worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]
       .filter(Boolean)
       .map((value) => new Date(value))
       .filter((date) => !Number.isNaN(date.getTime()))
       .sort((a, b) => b.getTime() - a.getTime());
 
     return dates[0]?.toISOString() || null;
-  }, [worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
+  }, [weatherState.fetchedAt, worldCupState.fetchedAt, newsState.fetchedAt, watchlistState.fetchedAt, realEstateWatchlistState.fetchedAt, indicesState.fetchedAt, insiderState.fetchedAt, swapsState.fetchedAt, fxState.fetchedAt, stiborState.fetchedAt, niborState.fetchedAt, yieldState.fetchedAt]);
 
-  const hasError = worldCupState.status === "error" || newsState.status === "error" || insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
+  const hasError = weatherState.status === "error" || worldCupState.status === "error" || newsState.status === "error" || insiderState.status === "error" || watchlistState.status === "error" || realEstateWatchlistState.status === "error" || indicesState.status === "error" || swapsState.status === "error" || fxState.status === "error" || stiborState.status === "error" || niborState.status === "error" || yieldState.status === "error";
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
@@ -2254,6 +2413,7 @@ export default function MarketDashboardPrototype() {
         </AnimatePresence>
 
         <main className="grid grid-cols-2 gap-3">
+          <WeatherTile weatherState={weatherState} onClick={() => setShowWeather(true)} />
           <WorldCupTile worldCupState={worldCupState} onClick={() => setShowWorldCup(true)} />
 
           <div className="col-span-2 mt-1">
@@ -2420,6 +2580,7 @@ export default function MarketDashboardPrototype() {
       {showInsiderTrades && <InsiderTradesOverlay insiderState={insiderState} onClose={() => setShowInsiderTrades(false)} />}
       {showNewsFeed && <NewsFeedOverlay newsState={newsState} onClose={() => setShowNewsFeed(false)} />}
       {showYield && <YieldOverlay yieldState={yieldState} onClose={() => setShowYield(false)} />}
+      {showWeather && <WeatherOverlay weatherState={weatherState} onClose={() => setShowWeather(false)} />}
       {showWorldCup && <WorldCupOverlay worldCupState={worldCupState} onClose={() => setShowWorldCup(false)} />}
     </div>
   );

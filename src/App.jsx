@@ -193,7 +193,7 @@ const fallbackWeatherState = {
   fetchedAt: null,
   updatedAt: null,
   message: null,
-  location: { name: "Oslo" },
+  location: { name: "Aker Brygge" },
   days: [],
 };
 
@@ -975,20 +975,31 @@ function formatWeatherWind(value) {
   return `${Math.round(Number(value))} m/s`;
 }
 
+function formatWeatherDateShort(value) {
+  if (!value) return "";
+  const [year, month, day] = String(value).split("-");
+  if (!year || !month || !day) return "";
+  return `${day}.${month}`;
+}
+
 function WeatherDayRow({ day }) {
   const periods = day?.periods || {};
+  const dateLabel = formatWeatherDateShort(day?.date);
   return (
-    <div className="grid grid-cols-[5.5rem_repeat(3,minmax(0,1fr))_4.5rem_3.5rem] items-center gap-2 rounded-2xl bg-white px-3 py-3 shadow-sm ring-1 ring-sky-100/80">
-      <div className="text-lg font-semibold tracking-[-0.04em] text-stone-950">{day?.label || "—"}</div>
+    <div className="grid grid-cols-[6.75rem_repeat(3,minmax(3.25rem,1fr))_4.25rem_3.35rem] items-center gap-2 rounded-2xl bg-white px-3 py-2.5 shadow-sm ring-1 ring-sky-100/80">
+      <div>
+        <div className="text-sm font-semibold tracking-[-0.03em] text-stone-950">{day?.label || "—"}</div>
+        {dateLabel && <div className="mt-0.5 text-[10px] font-medium tabular-nums text-slate-400">{dateLabel}</div>}
+      </div>
       {[periods.morning, periods.afternoon, periods.evening].map((period, index) => (
-        <div key={`${day?.date}-${index}`} className="flex justify-center text-2xl" title={period?.condition || ""}>
+        <div key={`${day?.date}-${index}`} className="flex justify-center text-xl leading-none" title={period?.condition || ""}>
           {period?.icon || "—"}
         </div>
       ))}
-      <div className="whitespace-nowrap text-right text-base font-semibold tabular-nums text-red-600">
+      <div className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-red-600">
         {formatWeatherTemp(day?.high)} <span className="text-stone-300">/</span> {formatWeatherTemp(day?.low)}
       </div>
-      <div className="whitespace-nowrap text-right text-sm font-semibold tabular-nums text-stone-900">{formatWeatherWind(day?.wind)}</div>
+      <div className="whitespace-nowrap text-right text-xs font-semibold tabular-nums text-stone-900">{formatWeatherWind(day?.wind)}</div>
     </div>
   );
 }
@@ -1002,13 +1013,13 @@ function WeatherTile({ weatherState, onClick }) {
       onClick={onClick}
       className="col-span-2 rounded-[1.65rem] bg-sky-50 p-3 text-left shadow-sm ring-1 ring-sky-100"
     >
-      <div className="mb-2 grid grid-cols-[5.5rem_repeat(3,minmax(0,1fr))_4.5rem_3.5rem] gap-2 px-3 text-center text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">
+      <div className="mb-2 grid grid-cols-[6.75rem_repeat(3,minmax(3.25rem,1fr))_4.25rem_3.35rem] gap-2 px-3 text-center text-[9px] font-semibold uppercase leading-tight tracking-[0.06em] text-slate-500">
         <span />
-        <span>Morgen</span>
-        <span>Ettermiddag</span>
-        <span>Kveld</span>
-        <span>Høy/lav</span>
-        <span>Vind</span>
+        <span className="truncate">Morgen</span>
+        <span className="truncate">Ettermiddag</span>
+        <span className="truncate">Kveld</span>
+        <span className="truncate">Høy/lav</span>
+        <span className="truncate">Vind</span>
       </div>
       <div className="grid gap-2">
         {days.length ? days.slice(0, 2).map((day) => <WeatherDayRow key={day.date || day.label} day={day} />) : (
@@ -1018,7 +1029,7 @@ function WeatherTile({ weatherState, onClick }) {
         )}
       </div>
       <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-slate-400">
-        <span className="inline-flex items-center gap-1"><CloudSun size={12} /> {weatherState.location?.name || "Oslo"}</span>
+        <span className="inline-flex items-center gap-1"><CloudSun size={12} /> {weatherState.location?.name || "Aker Brygge"}</span>
         <span>{weatherState.status === "loading" ? "Oppdaterer" : `Oppdatert: ${formatDateTimeShort(weatherState.updatedAt || weatherState.fetchedAt)}`}</span>
       </div>
     </button>
@@ -1053,7 +1064,7 @@ function WeatherOverlay({ weatherState, onClose }) {
   return (
     <Overlay
       title="Vær"
-      subtitle={`${weatherState.location?.name || "Oslo"} · i dag og i morgen`}
+      subtitle={`${weatherState.location?.name || "Aker Brygge"} · i dag og i morgen`}
       onClose={onClose}
       footer={
         <a

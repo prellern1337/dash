@@ -1125,25 +1125,36 @@ function WorldCupTeam({ team, compact = false, tone = "light" }) {
 
 function WorldCupMatchRow({ match, mode = "upcoming", compact = false, tone = "light" }) {
   const teams = match?.teams || [];
-  const dark = tone === "dark";
+  const live = mode === "upcoming" && match?.live;
+  const dark = tone === "dark" && !live;
+  const teamTone = live ? "light" : tone;
+  const rowClass = live
+    ? "bg-stone-100 text-stone-950 ring-1 ring-stone-200"
+    : dark
+      ? "bg-white/[0.07] ring-1 ring-white/10"
+      : "bg-stone-50";
   return (
-    <div className={`rounded-2xl p-2.5 ${dark ? "bg-white/[0.07] ring-1 ring-white/10" : "bg-stone-50"}`}>
+    <div className={`rounded-2xl p-2.5 ${rowClass}`}>
       <div className="grid grid-cols-[6rem_1fr_5rem] items-center gap-3">
         <div className="flex shrink-0 items-center justify-center gap-3">
-          <WorldCupTeam team={teams[0]} compact={compact} tone={tone} />
-          <span className="text-[10px] font-semibold text-stone-300">–</span>
-          <WorldCupTeam team={teams[1]} compact={compact} tone={tone} />
+          <WorldCupTeam team={teams[0]} compact={compact} tone={teamTone} />
+          <span className={`text-[10px] font-semibold ${live ? "text-stone-500" : "text-stone-300"}`}>–</span>
+          <WorldCupTeam team={teams[1]} compact={compact} tone={teamTone} />
         </div>
         <div className={`min-w-0 text-center ${dark ? "[&_*]:!text-white/90" : ""}`}>
-          <div className={`truncate text-[10px] font-semibold uppercase tracking-[0.08em] ${dark ? "text-amber-200/75" : "text-stone-400"}`}>{match?.phase || "VM"}</div>
-          {mode === "upcoming" ? (
+          <div className={`truncate text-[10px] font-semibold uppercase tracking-[0.08em] ${live ? "text-stone-500" : dark ? "text-amber-200/75" : "text-stone-400"}`}>{match?.phase || "VM"}</div>
+          {live ? (
+            <div className="mt-0.5 text-sm font-black tabular-nums text-stone-950">{match?.result || "0–0"}</div>
+          ) : mode === "upcoming" ? (
             <div className={`mt-0.5 text-xs font-semibold tabular-nums ${dark ? "text-white/90" : "text-stone-800"}`}>{formatWorldCupTime(match?.date)}</div>
           ) : (
             <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{match?.result || "—"}</div>
           )}
         </div>
         <div className="flex justify-end">
-          {mode === "upcoming" && <ChannelBadge channel={match?.channel} />}
+          {live ? (
+            <span className="inline-flex h-6 min-w-11 items-center justify-center rounded-lg bg-red-600 px-2 text-[10px] font-black tracking-[-0.03em] text-white">LIVE</span>
+          ) : mode === "upcoming" && <ChannelBadge channel={match?.channel} />}
         </div>
       </div>
     </div>

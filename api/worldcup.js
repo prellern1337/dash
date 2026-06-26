@@ -132,7 +132,9 @@ function normalizeEvent(event) {
     date: event.date || competition.date,
     phase: phaseLabel(event),
     status: status.state || "pre",
+    statusName: status.name || "",
     completed: Boolean(status.completed),
+    live: status.state === "in" && !status.completed,
     detail: status.shortDetail || status.detail || status.description || "",
     venue: competition.venue?.fullName || null,
     teams,
@@ -302,7 +304,7 @@ export default async function handler(request, response) {
     const now = new Date();
     const rawEvents = (scoreboard.events || []).map(normalizeEvent).sort((a, b) => new Date(a.date) - new Date(b.date));
     const events = await enrichEventsWithVgChannels(rawEvents, now);
-    const upcoming = events.filter((event) => !event.completed && new Date(event.date) >= now).slice(0, 6);
+    const upcoming = events.filter((event) => !event.completed && (event.live || new Date(event.date) >= now)).slice(0, 6);
     const recent = events.filter((event) => event.completed).sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 6);
     const groups = (standings.children || []).map(normalizeStandings);
     const knockoutRounds = buildKnockoutRounds(events, now);

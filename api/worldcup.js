@@ -97,16 +97,14 @@ function eventResult(teams, status = {}) {
   const winner = teams.find((team) => team.winner);
   const hasShootout = teams.every((team) => team.shootoutScore !== null && team.shootoutScore !== undefined);
   if (hasShootout && winner) {
-    const loser = teams.find((team) => team.id !== winner.id) || null;
-    const shootout = loser ? `${winner.shootoutScore}–${loser.shootoutScore}` : formatScorePair(home, away, "shootoutScore");
-    return `${winner.abbreviation} vant ${score} (${shootout} str.)`;
+    const shootout = formatScorePair(home, away, "shootoutScore");
+    return shootout ? `${score} (${shootout} str)` : score;
   }
 
   const statusText = `${status.name || ""} ${status.detail || ""} ${status.shortDetail || ""} ${status.description || ""}`.toLowerCase();
   const tied = String(home?.score) === String(away?.score);
   if (winner && tied) {
-    const suffix = /aet|extra time|after extra/i.test(statusText) ? " eeo." : "";
-    return `${winner.abbreviation} vant ${score}${suffix}`;
+    return /aet|extra time|after extra/i.test(statusText) ? `${score} (eeo)` : score;
   }
 
   return score;

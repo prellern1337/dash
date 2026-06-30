@@ -1148,7 +1148,7 @@ function WorldCupMatchRow({ match, mode = "upcoming", compact = false, tone = "l
           ) : mode === "upcoming" ? (
             <div className={`mt-0.5 text-xs font-semibold tabular-nums ${dark ? "text-white/90" : "text-stone-800"}`}>{formatWorldCupTime(match?.date)}</div>
           ) : (
-            <div className="mt-0.5 text-xs font-semibold tabular-nums text-stone-800">{match?.result || "—"}</div>
+            <div className="mt-0.5 text-[11px] font-semibold leading-tight text-stone-800" title={match?.result || ""}>{match?.result || "—"}</div>
           )}
         </div>
         <div className="flex justify-end">

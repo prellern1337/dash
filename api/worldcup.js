@@ -79,8 +79,37 @@ function teamFromCompetitor(competitor) {
     abbreviation: team.abbreviation || "—",
     logo: team.logo || team.logos?.[0]?.href || null,
     score: competitor?.score ?? null,
+    shootoutScore: competitor?.shootoutScore ?? null,
     winner: Boolean(competitor?.winner),
   };
+}
+
+function formatScorePair(a, b, field = "score") {
+  if (a?.[field] === null || a?.[field] === undefined || b?.[field] === null || b?.[field] === undefined) return null;
+  return `${a[field]}–${b[field]}`;
+}
+
+function eventResult(teams, status = {}) {
+  const [home, away] = teams;
+  const score = formatScorePair(home, away);
+  if (!score) return null;
+
+  const winner = teams.find((team) => team.winner);
+  const hasShootout = teams.every((team) => team.shootoutScore !== null && team.shootoutScore !== undefined);
+  if (hasShootout && winner) {
+    const loser = teams.find((team) => team.id !== winner.id) || null;
+    const shootout = loser ? `${winner.shootoutScore}–${loser.shootoutScore}` : formatScorePair(home, away, "shootoutScore");
+    return `${winner.abbreviation} vant ${score} (${shootout} str.)`;
+  }
+
+  const statusText = `${status.name || ""} ${status.detail || ""} ${status.shortDetail || ""} ${status.description || ""}`.toLowerCase();
+  const tied = String(home?.score) === String(away?.score);
+  if (winner && tied) {
+    const suffix = /aet|extra time|after extra/i.test(statusText) ? " eeo." : "";
+    return `${winner.abbreviation} vant ${score}${suffix}`;
+  }
+
+  return score;
 }
 
 function phaseLabel(event) {
@@ -139,7 +168,7 @@ function normalizeEvent(event) {
     venue: competition.venue?.fullName || null,
     teams,
     channel: fallbackChannelForMatch(event, teams),
-    result: teams.every((team) => team.score !== null) ? `${teams[0]?.score ?? "—"}–${teams[1]?.score ?? "—"}` : null,
+    result: eventResult(teams, status),
   };
 }
 

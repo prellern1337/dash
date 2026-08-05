@@ -664,7 +664,7 @@ async function updateWatchlist(action, group = "all") {
       const rows = await fetchYahooHistory(asset, fetchRange);
       const cutoff = needsHistoryCatchup ? longCutoff : recentCutoff;
       const filteredRows = filterHistoryRowsSince(rows, cutoff);
-      const usefulRows = action === "update" && !needsHistoryCatchup ? filteredRows.slice(-5) : filteredRows;
+      const usefulRows = filteredRows;
       const existing = needsHistoryCatchup ? longExisting : await getExistingDates(asset.metricKey, cutoff);
       const metricRows = rowsToMetricRows(asset, usefulRows, fetchedAt, existing);
       const inserted = await insertRows(metricRows);

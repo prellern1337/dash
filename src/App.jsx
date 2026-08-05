@@ -336,56 +336,32 @@ function formatArticleDate(value) {
   }).format(date);
 }
 
-function formatChartDate(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
+const NORWEGIAN_SHORT_MONTHS = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"];
 
-  return new Intl.DateTimeFormat("no-NO", {
-    month: "2-digit",
-    year: "2-digit",
-  }).format(date);
+function parseChartDate(value) {
+  if (!value) return null;
+  const date = new Date(String(value).length === 10 ? `${value}T12:00:00` : value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function formatSwapChartDate(value, data = []) {
-  if (!value) return "";
-  const date = new Date(`${value}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return value;
+function formatMonthYearShort(value) {
+  const date = parseChartDate(value);
+  if (!date) return value || "";
 
-  const dates = (data || [])
-    .map((point) => new Date(`${point.date}T12:00:00`))
-    .filter((pointDate) => !Number.isNaN(pointDate.getTime()));
+  return `${NORWEGIAN_SHORT_MONTHS[date.getMonth()]}.${String(date.getFullYear()).slice(-2)}`;
+}
 
-  if (!dates.length) {
-    return new Intl.DateTimeFormat("no-NO", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
-    }).format(date);
+function getMonthEndTicks(data = []) {
+  const byMonth = new Map();
+
+  for (const point of data) {
+    const date = parseChartDate(point?.date);
+    if (!date) continue;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    byMonth.set(key, point.date);
   }
 
-  const min = Math.min(...dates.map((pointDate) => pointDate.getTime()));
-  const max = Math.max(...dates.map((pointDate) => pointDate.getTime()));
-  const spanDays = Math.round((max - min) / (1000 * 60 * 60 * 24));
-
-  if (spanDays <= 90) {
-    return new Intl.DateTimeFormat("no-NO", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
-    }).format(date);
-  }
-
-  if (spanDays <= 730) {
-    return new Intl.DateTimeFormat("no-NO", {
-      month: "2-digit",
-      year: "2-digit",
-    }).format(date);
-  }
-
-  return new Intl.DateTimeFormat("no-NO", {
-    year: "numeric",
-  }).format(date);
+  return Array.from(byMonth.values());
 }
 
 function formatTooltipDate(value) {
@@ -649,8 +625,9 @@ function FxOverlay({ pair, onClose }) {
               tickLine={false}
               axisLine={false}
               minTickGap={28}
+              ticks={getMonthEndTicks(data)}
               interval="preserveStartEnd"
-              tickFormatter={formatChartDate}
+              tickFormatter={formatMonthYearShort}
             />
             <YAxis
               domain={[min - padding, max + padding]}
@@ -742,8 +719,9 @@ function SwapOverlay({ currency, swapsState, onClose }) {
                 tickLine={false}
                 axisLine={false}
                 minTickGap={28}
+                ticks={getMonthEndTicks(data)}
                 interval="preserveStartEnd"
-                tickFormatter={(value) => formatSwapChartDate(value, data)}
+                tickFormatter={formatMonthYearShort}
               />
               <YAxis
                 domain={swapAxis.domain}
@@ -773,7 +751,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
       )}
 
       <div className="mt-3 text-[11px] text-stone-400">
-        Viser siste lagrede verdi per dag, inntil siste 60 dager. Pil/bp viser siste observasjon mot closing forrige arbeidsdag.
+        Pil/bp viser siste observasjon mot closing forrige arbeidsdag.
       </div>
     </Overlay>
   );
@@ -830,8 +808,9 @@ function RateHistoryOverlay({ rate, onClose }) {
                 tickLine={false}
                 axisLine={false}
                 minTickGap={28}
+                ticks={getMonthEndTicks(data)}
                 interval="preserveStartEnd"
-                tickFormatter={(value) => formatSwapChartDate(value, data)}
+                tickFormatter={formatMonthYearShort}
               />
               <YAxis
                 domain={[min - padding, max + padding]}
@@ -1320,8 +1299,9 @@ function IndexOverlay({ index, onClose }) {
                 tickLine={false}
                 axisLine={false}
                 minTickGap={28}
+                ticks={getMonthEndTicks(data)}
                 interval="preserveStartEnd"
-                tickFormatter={(value) => formatSwapChartDate(value, data)}
+                tickFormatter={formatMonthYearShort}
               />
               <YAxis
                 domain={[min - padding, max + padding]}

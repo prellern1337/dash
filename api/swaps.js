@@ -32,17 +32,21 @@ function emptyData() {
 
 async function fetchRows() {
   const supabase = getSupabaseAdmin();
-  const keys = WANTED.map((item) => item.key);
+  const results = await Promise.all(
+    WANTED.map(async (item) => {
+      const { data, error } = await supabase
+        .from("market_metrics")
+        .select("*")
+        .eq("metric_key", item.key)
+        .order("fetched_at", { ascending: false })
+        .limit(2000);
 
-  const { data, error } = await supabase
-    .from("market_metrics")
-    .select("*")
-    .in("metric_key", keys)
-    .order("fetched_at", { ascending: false })
-    .limit(2500);
+      if (error) throw error;
+      return data || [];
+    })
+  );
 
-  if (error) throw error;
-  return data || [];
+  return results.flat();
 }
 
 function rowIdentity(row) {
@@ -139,10 +143,10 @@ function findSuspiciousOnePercentRows(rows) {
   return Array.from(unique.values());
 }
 
-function buildDailySeries(rows, key, days = 60, ignored = new Set()) {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - days);
-  const cutoffIso = cutoff.toISOString().slice(0, 10);
+function buildDailySeries(rows, key, days = null, ignored = new Set()) {
+  const cutoff = days ? new Date() : null;
+  if (cutoff) cutoff.setDate(cutoff.getDate() - days);
+  const cutoffIso = cutoff?.toISOString().slice(0, 10) || null;
 
   const relevant = (rows || [])
     .filter(
@@ -157,7 +161,7 @@ function buildDailySeries(rows, key, days = 60, ignored = new Set()) {
       fetchedAt: row.fetched_at,
       value: Number(row.value),
     }))
-    .filter((row) => row.date && row.date >= cutoffIso)
+    .filter((row) => row.date && (!cutoffIso || row.date >= cutoffIso))
     .sort((a, b) => new Date(a.fetchedAt).getTime() - new Date(b.fetchedAt).getTime());
 
   // Last accepted successful run per day.
@@ -203,14 +207,14 @@ function previousCloseChange(rows, item, latestRow, ignored = new Set()) {
 function buildHistory(rows, ignored = new Set()) {
   return {
     NOK: {
-      "3 Yr": buildDailySeries(rows, "swap_nok_3y", 60, ignored),
-      "5 Yr": buildDailySeries(rows, "swap_nok_5y", 60, ignored),
-      "10 Yr": buildDailySeries(rows, "swap_nok_10y", 60, ignored),
+      "3 Yr": buildDailySeries(rows, "swap_nok_3y", null, ignored),
+      "5 Yr": buildDailySeries(rows, "swap_nok_5y", null, ignored),
+      "10 Yr": buildDailySeries(rows, "swap_nok_10y", null, ignored),
     },
     SEK: {
-      "3 Yr": buildDailySeries(rows, "swap_sek_3y", 60, ignored),
-      "5 Yr": buildDailySeries(rows, "swap_sek_5y", 60, ignored),
-      "10 Yr": buildDailySeries(rows, "swap_sek_10y", 60, ignored),
+      "3 Yr": buildDailySeries(rows, "swap_sek_3y", null, ignored),
+      "5 Yr": buildDailySeries(rows, "swap_sek_5y", null, ignored),
+      "10 Yr": buildDailySeries(rows, "swap_sek_10y", null, ignored),
     },
   };
 }

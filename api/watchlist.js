@@ -440,7 +440,7 @@ async function fetchYahooHistory(asset, range = "1y") {
       volume: quote.volume?.[i] ?? null,
       currency: meta.currency || asset.currency,
     }))
-    .filter((row) => row.date && Number.isFinite(Number(row.close)))
+    .filter((row) => row.date && Number.isFinite(Number(row.close)) && Number(row.close) > 0)
     .map((row) => ({
       ...row,
       open: Number.isFinite(Number(row.open)) ? Number(row.open) : null,
@@ -556,6 +556,7 @@ async function getExistingDates(metricKey, cutoffIso) {
     .select("metric_key,observed_date")
     .eq("metric_key", metricKey)
     .eq("status", "ok")
+    .gt("value", 0)
     .gte("observed_date", cutoffIso)
     .not("observed_date", "is", null);
 
@@ -747,7 +748,7 @@ function buildSeries(rows, metricKey, days = 760) {
   const cutoff = addDays(new Date(), -days).toISOString().slice(0, 10);
 
   const relevant = (rows || [])
-    .filter((row) => row.metric_key === metricKey && Number.isFinite(Number(row.value)))
+    .filter((row) => row.metric_key === metricKey && Number.isFinite(Number(row.value)) && Number(row.value) > 0)
     .map((row) => ({
       date: rowDate(row),
       value: Number(row.value),
@@ -783,7 +784,10 @@ function valueNearOrBefore(series, targetDate, toleranceDays = 14) {
     }
   }
 
-  if (before) return before;
+  if (before) {
+    const diffDays = Math.abs((new Date(`${before.date}T12:00:00Z`).getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays <= toleranceDays) return before;
+  }
 
   if (after) {
     const diffDays = Math.abs((new Date(`${after.date}T12:00:00Z`).getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24));

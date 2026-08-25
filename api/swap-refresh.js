@@ -2,8 +2,8 @@ import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
 
-const BUILD = "swap-refresh-guard-v1-2026-06-18";
-const SOURCE_BASE = "https://seb.no/ssc/trading/fx-rates-bff/api/rates/swap";
+const BUILD = "swap-refresh-sebgroup-table-v2-2026-08-25";
+const SOURCE_BASE = "https://sebgroup.com/ssc/trading/fx-rates-bff/api/rates/swap";
 
 const CURRENCIES = [
   { code: "NOK", sourceName: "SEB", sourceUrl: `${SOURCE_BASE}?currency=NOK` },
@@ -170,9 +170,63 @@ function chooseCandidate(candidates, tenor) {
   return valid.pop();
 }
 
-function extractSwapRatesFromJson(json) {
+function cellValue(cell) {
+  if (cell && typeof cell === "object" && "value" in cell) return cell.value;
+  return cell;
+}
+
+function extractStructuredSebTableRates(json) {
   const result = {};
+
+  function visit(node, path = "") {
+    if (!node || typeof node !== "object") return;
+
+    if (Array.isArray(node)) {
+      node.forEach((item, index) => visit(item, `${path}[${index}]`));
+      return;
+    }
+
+    if (Array.isArray(node.headers) && Array.isArray(node.rows)) {
+      const headers = node.headers.map(cellValue).map((value) => String(value ?? ""));
+      const maturityIndex = headers.findIndex((header) => /maturity|tenor|term|løpetid|lopetid/i.test(header));
+      const priceIndex = headers.findIndex((header) => /price|rate|swap|rente|value/i.test(header));
+
+      if (maturityIndex >= 0 && priceIndex >= 0) {
+        for (const [rowIndex, row] of node.rows.entries()) {
+          const cells = Array.isArray(row?.data) ? row.data : Array.isArray(row) ? row : null;
+          if (!cells) continue;
+
+          for (const tenor of TENORS) {
+            if (result[tenor.years] || !labelMatchesTenor(cellValue(cells[maturityIndex]), tenor)) continue;
+
+            const value = normalizeSwapValue(parseNumber(cellValue(cells[priceIndex])));
+            if (!isPlausibleSwapRate(value)) continue;
+
+            result[tenor.years] = {
+              tenorYears: tenor.years,
+              value,
+              rawValue: cellValue(cells[priceIndex]),
+              path: `${path || "root"}.rows[${rowIndex}].data[${priceIndex}]`,
+              reason: "seb_structured_maturity_price",
+            };
+          }
+        }
+      }
+    }
+
+    for (const [key, value] of Object.entries(node)) {
+      visit(value, path ? `${path}.${key}` : key);
+    }
+  }
+
+  visit(json);
+  return result;
+}
+
+function extractSwapRatesFromJson(json) {
+  const result = extractStructuredSebTableRates(json);
   for (const tenor of TENORS) {
+    if (result[tenor.years]) continue;
     const candidate = chooseCandidate(collectCandidatesFromObject(json, tenor), tenor);
     if (candidate) result[tenor.years] = candidate;
   }

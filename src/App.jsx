@@ -323,6 +323,10 @@ function formatDateTimeShort(value) {
   }).format(date);
 }
 
+function getSwapFetchedAt(swapsState, currency) {
+  return swapsState?.data?.[currency]?.fetchedAt || swapsState?.fetchedAt || null;
+}
+
 function formatArticleDate(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -514,13 +518,13 @@ function SwapChangeBadge({ changeBps }) {
   );
 }
 
-function RateStack({ rows }) {
+function RateStack({ rows, compact = false }) {
   return (
-    <div className="mt-2 space-y-1.5">
+    <div className={`${compact ? "mt-1" : "mt-2"} space-y-1.5`}>
       {rows.map((row) => {
         const hasChange = Object.prototype.hasOwnProperty.call(row, "changeBps");
         return (
-          <div key={row.label} className={`grid ${hasChange ? "grid-cols-[26px_minmax(0,1fr)_38px]" : "grid-cols-[minmax(0,1fr)_auto]"} items-center gap-2 rounded-xl bg-stone-50 px-2 py-1.5`}>
+          <div key={row.label} className={`grid ${hasChange ? "grid-cols-[26px_minmax(0,1fr)_38px]" : "grid-cols-[minmax(0,1fr)_auto]"} items-center gap-2 rounded-xl bg-stone-50 px-2 ${compact ? "py-1" : "py-1.5"}`}>
             <span className="text-[11px] font-medium leading-tight text-stone-500">{row.label}</span>
             <span className="min-w-0 text-right text-[14px] font-semibold tabular-nums tracking-[-0.04em] text-stone-950">
               <span className="whitespace-nowrap">{row.value}</span>
@@ -668,6 +672,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
   const history = swapsState.history?.[currency] || {};
   const data = mergeSwapHistory(history);
   const current = swapsState.data?.[currency]?.rates || {};
+  const fetchedAt = getSwapFetchedAt(swapsState, currency);
   const values = data
     .flatMap((row) => ["3 Yr", "5 Yr", "10 Yr"].map((tenor) => row[tenor]))
     .filter((value) => Number.isFinite(Number(value)))
@@ -696,9 +701,9 @@ function SwapOverlay({ currency, swapsState, onClose }) {
         </a>
       }
     >
-      <div className="mb-4 grid grid-cols-3 gap-2">
+      <div className="mb-3 grid grid-cols-3 gap-2">
         {["3 Yr", "5 Yr", "10 Yr"].map((tenor) => (
-          <div key={tenor} className="rounded-2xl bg-stone-50 p-3">
+          <div key={tenor} className="rounded-2xl bg-stone-50 p-2.5">
             <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-stone-400">{tenor.replace(" Yr", "Y")}</div>
             <div className="mt-1 flex items-center text-lg font-semibold tracking-[-0.04em] text-stone-950">
               {formatOptionalPercent(current[tenor])}
@@ -751,7 +756,7 @@ function SwapOverlay({ currency, swapsState, onClose }) {
       )}
 
       <div className="mt-3 text-[11px] text-stone-400">
-        Pil/bp viser siste observasjon mot closing forrige arbeidsdag.
+        Hentet: {formatDateTimeShort(fetchedAt)} · Pil/bp viser siste observasjon mot closing forrige arbeidsdag.
       </div>
     </Overlay>
   );
@@ -2116,22 +2121,26 @@ export default function MarketDashboardPrototype() {
 
           <Tile title="SWAP NOK" source="SEB" accent="violet" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("NOK")}>
             <RateStack
+              compact
               rows={[
                 { label: "3Y", value: formatOptionalPercent(swapsState.data.NOK.rates["3 Yr"]), changeBps: swapsState.data.NOK.changes?.["3 Yr"]?.bps },
                 { label: "5Y", value: formatOptionalPercent(swapsState.data.NOK.rates["5 Yr"]), changeBps: swapsState.data.NOK.changes?.["5 Yr"]?.bps },
                 { label: "10Y", value: formatOptionalPercent(swapsState.data.NOK.rates["10 Yr"]), changeBps: swapsState.data.NOK.changes?.["10 Yr"]?.bps },
               ]}
             />
+            <div className="mt-1 text-[9px] leading-none text-stone-400">Hentet: {formatDateTimeShort(getSwapFetchedAt(swapsState, "NOK"))}</div>
           </Tile>
 
           <Tile title="SWAP SEK" source="SEB" accent="blue" icon={<TrendingUp size={17} />} size="large" onClick={() => setSelectedSwap("SEK")}>
             <RateStack
+              compact
               rows={[
                 { label: "3Y", value: formatOptionalPercent(swapsState.data.SEK.rates["3 Yr"]), changeBps: swapsState.data.SEK.changes?.["3 Yr"]?.bps },
                 { label: "5Y", value: formatOptionalPercent(swapsState.data.SEK.rates["5 Yr"]), changeBps: swapsState.data.SEK.changes?.["5 Yr"]?.bps },
                 { label: "10Y", value: formatOptionalPercent(swapsState.data.SEK.rates["10 Yr"]), changeBps: swapsState.data.SEK.changes?.["10 Yr"]?.bps },
               ]}
             />
+            <div className="mt-1 text-[9px] leading-none text-stone-400">Hentet: {formatDateTimeShort(getSwapFetchedAt(swapsState, "SEK"))}</div>
           </Tile>
 
           <Tile

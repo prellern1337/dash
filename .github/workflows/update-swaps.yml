@@ -18,6 +18,16 @@ jobs:
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
-          curl -fsS \
+          response="$(curl -fsS \
             -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
-            "https://dash-martin-mogstad-s-projects.vercel.app/api/swaps?action=update"
+            "https://dash-martin-mogstad-s-projects.vercel.app/api/swaps?action=update")"
+
+          echo "$response"
+
+          node -e '
+            const payload = JSON.parse(process.argv[1]);
+            if (payload.status === "error" || payload.status === "partial") {
+              console.error(payload.message || `SEB swap update returned ${payload.status}`);
+              process.exit(1);
+            }
+          ' "$response"

@@ -1,3 +1,4 @@
+import { metricInsert } from "../lib/scheduled-writes.js";
 import { getSupabaseAdmin } from "../lib/supabase.js";
 
 export const config = { maxDuration: 60 };
@@ -424,7 +425,7 @@ async function insertArticles(articles, fetchedAt) {
   if (!rows.length) return [];
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.from("market_metrics").insert(rows).select("*");
+  const { data, error } = await metricInsert(supabase, rows).select("*");
 
   if (error) throw error;
   return data || [];

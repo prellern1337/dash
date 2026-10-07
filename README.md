@@ -51,3 +51,8 @@ Se særlig på:
 Build-markør:
 
 `seb-swaps-direct-api-hard-fix-v1-2026-06-17`
+
+## Tidskritiske dataoppdateringer
+
+Se [SCHEDULER.md](SCHEDULER.md) for idempotent catch-up, freshness-grenser,
+Vercel primærscheduler og GitHub sekundær/manual fallback, samt aktiveringstrinn.

@@ -1,3 +1,4 @@
+import { metricInsert } from "../lib/scheduled-writes.js";
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import { DNB_FUND_HISTORY } from "../lib/dnb-fund-history.js";
 import {
@@ -672,10 +673,7 @@ async function insertIndexRows(rows) {
   if (!rows.length) return [];
 
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase
-    .from("market_metrics")
-    .insert(rows)
-    .select("*");
+  const { data, error } = await metricInsert(supabase, rows).select("*");
 
   if (error) throw error;
   return data || [];

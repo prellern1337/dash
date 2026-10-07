@@ -3,9 +3,9 @@ name: Update prime yields
 on:
   workflow_dispatch:
   schedule:
-    # Runs every Wednesday at 14:00 UTC.
+    # Runs approximately every 10 days (8-11 days across month boundaries) at 14:00 UTC.
     # Approx. 16:00 Norway summer time / 15:00 winter time.
-    - cron: '0 14 * * 3'
+    - cron: '0 14 1,11,21 * *'
 
 jobs:
   update-yields:

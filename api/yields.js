@@ -1,3 +1,4 @@
+export const config = { maxDuration: 60 };
 import { getSupabaseAdmin } from "../lib/supabase.js";
 import updateYieldsHandler from "../lib/update-yields.js";
 import { normaliseYieldPeriod, periodFromNewsecDocument } from "../lib/yield-period.js";

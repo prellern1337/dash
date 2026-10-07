@@ -13,10 +13,23 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - name: Trigger Vercel market indices update
+      - name: Legacy trigger (until scheduler activation) Vercel market indices update
+        if: vars.DATA_SCHEDULER_ENABLED != 'true'
         env:
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           curl -fsS \
             -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}" \
             "https://dash-martin-mogstad-s-projects.vercel.app/api/indices?action=update"
+
+      - name: Idempotent secondary/manual catch-up
+        if: vars.DATA_SCHEDULER_ENABLED == 'true'
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: |
+          test -n "$CRON_SECRET"
+          curl --fail-with-body --silent --show-error --max-time 75 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+            "https://dash-eight-topaz.vercel.app/api/data-update?dataset=indices"

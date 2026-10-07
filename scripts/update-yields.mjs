@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { chromium } from "playwright";
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import { fetchAkershusYields } from "../lib/akershus-yields.js";
+import { fetchNewsecYields } from "../lib/newsec-yields.js";
 
 const OUTPUT_PATH = path.join(process.cwd(), "public", "data", "yields.json");
 
@@ -20,12 +20,6 @@ const SEGMENTS = [
   { id: "retail", label: "Handel", unionUrl: SOURCES.union.retail, akershusButton: "Handel", akershusExtractor: "retail" },
   { id: "logistics", label: "Logistikk", unionUrl: SOURCES.union.logistics, akershusButton: "Logistikk", akershusExtractor: "logistics" },
 ];
-
-const NEWSEC_ROWS = {
-  office: { rowLabel: "Office Oslo CBD", nextRowLabel: "Office Oslo centre" },
-  retail: { rowLabel: "Retail Prime", nextRowLabel: "Retail Normal" },
-  logistics: { rowLabel: "Logistics Prime", nextRowLabel: "Logistics Normal" },
-};
 
 function parseArgs() {
   const args = Object.fromEntries(
@@ -172,78 +166,16 @@ async function scrapeUnion(existing, errors) {
   return output;
 }
 
-function extractFirstPdfLink(html) {
-  const matches = [...html.matchAll(/href=["']([^"']+\.pdf[^"']*)["'][^>]*>([\s\S]*?)<\/a>/gi)];
-  if (matches.length === 0) {
-    const fallback = html.match(/https:\/\/cdn\.sanity\.io\/[^"'\s<>]+\.pdf/);
-    if (fallback) return { url: fallback[0], title: "Newsec yieldtabell" };
-    throw new Error("Fant ingen PDF-lenke på Newsec yieldtabell-side.");
-  }
-
-  const first = matches[0];
-  return {
-    url: first[1].startsWith("http") ? first[1] : `https://www.newsec.no${first[1]}`,
-    title: htmlToText(first[2]) || "Newsec yieldtabell",
-  };
-}
-
-function getLatestPeriodFromPdfText(text, fallbackTitle) {
-  const periods = [...text.matchAll(/\bQ[1-4]\s+20\d{2}\b/g)].map((match) => match[0]);
-  if (periods.length) return periods[periods.length - 1];
-  return periodFromText(fallbackTitle);
-}
-
-function extractNewsecLowValue(text, rowLabel, nextRowLabel) {
-  const normalisedText = text.replace(/\r/g, "\n");
-  const lines = normalisedText.split("\n").map((line) => line.trim()).filter(Boolean);
-  let rowText = lines.find((line) => line.toLowerCase().startsWith(rowLabel.toLowerCase()));
-
-  if (!rowText) {
-    const regex = new RegExp(`${escapeRegExp(rowLabel)}\\s+([\\s\\S]*?)(?=${escapeRegExp(nextRowLabel)}|$)`, "i");
-    const match = normalisedText.match(regex);
-    if (match) rowText = `${rowLabel} ${match[1]}`;
-  }
-
-  if (!rowText) throw new Error(`Fant ikke Newsec-raden "${rowLabel}".`);
-
-  const values = [...rowText.matchAll(/(\d{1,2}[,.]\d{2})\s*%/g)].map((match) => parseNumber(match[1]));
-  if (values.length < 2) throw new Error(`Fant ikke nok yieldverdier for Newsec-raden "${rowLabel}".`);
-
-  return values[values.length - 2];
-}
-
 async function scrapeNewsec(existing, errors) {
   const output = {};
 
   try {
-    const html = await fetchText(SOURCES.newsec);
-    const pdfLink = extractFirstPdfLink(html);
-
-    const response = await fetch(pdfLink.url, {
-      headers: {
-        Accept: "application/pdf",
-        "User-Agent": "Mozilla/5.0 (compatible; MarketDashboardPWA/1.0)",
-        "Cache-Control": "no-cache",
-      },
-    });
-
-    if (!response.ok) throw new Error(`Newsec-PDF svarte med ${response.status}`);
-
-    const arrayBuffer = await response.arrayBuffer();
-    const parsed = await pdfParse(Buffer.from(arrayBuffer));
-    const text = parsed.text || "";
-    const period = getLatestPeriodFromPdfText(text, pdfLink.title) || periodFromText(pdfLink.title);
-
-    for (const segment of SEGMENTS) {
-      const config = NEWSEC_ROWS[segment.id];
-      output[segment.id] = {
-        id: segment.id,
-        label: segment.label,
-        source: "Newsec",
-        sourceUrl: pdfLink.url,
-        value: extractNewsecLowValue(text, config.rowLabel, config.nextRowLabel),
-        period,
-        status: "auto",
+    const results = await fetchNewsecYields();
+    for (const result of results) {
+      const segment = SEGMENTS.find(item => item.id === result.segment);
+      output[result.segment] = {
+        id: result.segment, label: segment.label, source: "Newsec",
+        sourceUrl: result.sourceUrl, value: result.value, period: result.period, status: "auto",
       };
     }
   } catch (error) {
@@ -254,83 +186,19 @@ async function scrapeNewsec(existing, errors) {
   return output;
 }
 
-function akershusSegmentText(fullText) {
-  const parts = fullText.split(/Segmentoversikt/i);
-  return parts.length > 1 ? parts.slice(1).join("Segmentoversikt") : fullText;
-}
-
-function extractAkershusPeriod(text) {
-  const match = text.match(/Per\s+[A-Za-zÆØÅæøå]+\s+20\d{2}/i);
-  return match ? match[0] : null;
-}
-
-function extractAkershusValue(text, extractor) {
-  const scoped = akershusSegmentText(text);
-  const patterns = {
-    office: /Prime\s+yield(?:\s+Oslo)?\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
-    retail: /Prime\s+yield\s+high\s+street\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
-    logistics: /Prime\s+yield\s+([0-9]+(?:[,.][0-9]+)?)\s*%/i,
-  };
-
-  const match = scoped.match(patterns[extractor]);
-  if (!match) throw new Error(`Fant ikke Akershus Prime yield for ${extractor}.`);
-
-  const value = parseNumber(match[1]);
-  if (!Number.isFinite(value)) throw new Error(`Klarte ikke å tolke Akershus-verdi for ${extractor}.`);
-
-  return value;
-}
-
-async function clickAkershusSegment(page, label) {
-  const button = page.getByRole("button", { name: label, exact: true });
-  if (await button.count()) {
-    await button.first().click();
-    await page.waitForTimeout(1200);
-    return;
-  }
-
-  await page.getByText(label, { exact: true }).first().click();
-  await page.waitForTimeout(1200);
-}
-
 async function scrapeAkershus(existing, errors) {
   const output = {};
-  let browser;
-
   try {
-    browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({
-      viewport: { width: 1440, height: 1100 },
-      userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36",
-    });
-
-    await page.goto(SOURCES.akershus, { waitUntil: "networkidle", timeout: 60000 });
-    await page.waitForTimeout(2500);
-
-    let period = null;
-
-    for (const segment of SEGMENTS) {
-      await clickAkershusSegment(page, segment.akershusButton);
-      const bodyText = await page.locator("body").innerText({ timeout: 15000 });
-      period = period || extractAkershusPeriod(bodyText);
-
-      output[segment.id] = {
-        id: segment.id,
-        label: segment.label,
-        source: "Akershus",
-        sourceUrl: SOURCES.akershus,
-        value: extractAkershusValue(bodyText, segment.akershusExtractor),
-        period: period || "Ukjent periode",
-        status: "auto",
-      };
-    }
+    const { results } = await fetchAkershusYields();
+    for (const result of results) output[result.segment] = {
+      id: result.segment, label: SEGMENTS.find(s => s.id === result.segment).label,
+      source: "Akershus", sourceUrl: result.sourceUrl, value: result.value,
+      period: result.period, status: "auto",
+    };
   } catch (error) {
-    errors.push(`Akershus: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`Akershus: ${error.message}`);
     for (const segment of SEGMENTS) output[segment.id] = fallbackSource(existing, segment.id, "Akershus");
-  } finally {
-    if (browser) await browser.close();
   }
-
   return output;
 }
 

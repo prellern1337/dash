@@ -56,3 +56,10 @@ Build-markør:
 
 Se [SCHEDULER.md](SCHEDULER.md) for idempotent catch-up, freshness-grenser,
 Vercel primærscheduler og GitHub sekundær/manual fallback, samt aktiveringstrinn.
+
+Yield-innhentingen oppdager Newsec Quality Board-rapporter via sitemap og rapportoversikt,
+velger nyeste daterte yield-PDF og kontrollerer kvartalskolonnene i selve dokumentet.
+Den gamle yieldtabell-siden beholdes som en ekstra kilde. Feil på nyeste rapport
+skal gi en synlig feil fremfor å registrere en eldre PDF som en ny oppdatering.
+Akershus leses fra strukturert segmentdata i sidens HTML (Oslo, high street og logistikk),
+og alle tre kildene hentes parallelt. Legacy-filgeneratoren bruker samme parsere.

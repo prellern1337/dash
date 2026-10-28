@@ -1,3 +1,4 @@
+import { describeYieldPeriod, summariseYieldSources } from "../lib/yield-summary.js";
 import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -1424,13 +1425,27 @@ function InsiderTradesOverlay({ onClose, insiderState }) {
   );
 }
 
+export function YieldObservation({ observation }) {
+  const info = describeYieldPeriod(observation?.period);
+  return <>
+    <div>{formatOptionalPercent(observation?.value)}</div>
+    <div className="mt-1 text-[10px] font-normal leading-snug text-stone-500">{info.label}</div>
+    {info.warning && info.status !== "missing" && <div className="mt-1 text-[10px] font-normal leading-snug text-amber-700">{info.warning}</div>}
+  </>;
+}
+
+export function YieldAverageDetails({ segment }) {
+  const info = summariseYieldSources(segment?.sources);
+  return <div className="mt-1 text-[10px] font-normal leading-snug text-stone-600">
+    <div>{info.count} observasjoner. {info.warning}</div>
+    <div className="mt-1">{info.periods}</div>
+  </div>;
+}
+
 function YieldOverlay({ onClose, yieldState }) {
   const rows = yieldState.rows || fallbackYieldState.rows;
   const getRowSourceUrl = (row) => row.office?.sourceUrl || row.retail?.sourceUrl || row.logistics?.sourceUrl;
-  const periodSummary = rows.map((row) => row.period
-    ? `${row.source}${row.source === "Newsec" ? " " : " per "}${row.period}`
-    : `${row.source}: periode ikke oppgitt`
-  );
+
 
   return (
     <Overlay
@@ -1439,22 +1454,19 @@ function YieldOverlay({ onClose, yieldState }) {
       footer={
         <div className="flex items-center justify-between text-xs text-stone-500">
           <span>
-            Snitt beregnes av tilgjengelige kilder: UNION, Newsec og Akershus.
+            Kildesnittet er uvektet og inkluderer viste tall, også med eldre eller ukjent periode. Aldersvarsel: mer enn 180 dager etter periodens slutt.
           </span>
           <ExternalLink size={15} />
         </div>
       }
     >
       <div className="mb-3 rounded-2xl border border-stone-200 bg-white p-3 text-xs leading-relaxed text-stone-600">
-        <span className="font-semibold text-stone-800">Perioder for tallgrunnlaget:</span>{" "}
-        {periodSummary.length
-          ? `${periodSummary.join(", ")}. Periodene hentes automatisk fra kildene ved hver yield-oppdatering.`
-          : "Periodene blir tilgjengelige ved neste yield-oppdatering."}
+        Hvert tall viser sin egen kildeperiode. Kildesnitt med ulike perioder er ikke et samtidig markedsnivå. Hentetidspunkt sier ikke hvor fersk observasjonen er.
       </div>
 
       <div className="mb-3 rounded-2xl bg-stone-50 p-3 text-xs leading-relaxed text-stone-500">
         {yieldState.status === "ok"
-          ? `Sist oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}`
+          ? `Sist lest: ${formatDateTimeShort(yieldState.fetchedAt)}`
           : yieldState.status === "partial"
             ? `Delvis oppdatert: ${formatDateTimeShort(yieldState.fetchedAt)}. ${yieldState.errors?.[0] || ""}`
             : yieldState.status === "loading"
@@ -1500,16 +1512,16 @@ function YieldOverlay({ onClose, yieldState }) {
                         : "Mangler"}
                   </div>
                 </td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.office?.value)}</td>
-                <td className="px-2 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.retail?.value)}</td>
-                <td className="px-3 py-3 text-right tabular-nums text-stone-600">{formatOptionalPercent(row.logistics?.value)}</td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600"><YieldObservation observation={row.office} /></td>
+                <td className="px-2 py-3 text-right tabular-nums text-stone-600"><YieldObservation observation={row.retail} /></td>
+                <td className="px-3 py-3 text-right tabular-nums text-stone-600"><YieldObservation observation={row.logistics} /></td>
               </tr>
             ))}
             <tr className="border-t border-stone-200 bg-stone-50 font-semibold">
-              <td className="px-3 py-3 text-stone-950">Snitt</td>
-              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.office.average)}</td>
-              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.retail.average)}</td>
-              <td className="px-3 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.logistics.average)}</td>
+              <td className="px-3 py-3 text-stone-950">Kildesnitt</td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.office.average)}<YieldAverageDetails segment={yieldState.data.office} /></td>
+              <td className="px-2 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.retail.average)}<YieldAverageDetails segment={yieldState.data.retail} /></td>
+              <td className="px-3 py-3 text-right tabular-nums text-stone-950">{formatOptionalPercent(yieldState.data.logistics.average)}<YieldAverageDetails segment={yieldState.data.logistics} /></td>
             </tr>
           </tbody>
         </table>
@@ -1902,7 +1914,7 @@ export default function MarketDashboardPrototype() {
 
   const statusPill = useMemo(() => {
     if (swapsState.status === "ok" && fxState.status === "ok" && stiborState.status === "ok" && niborState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "Renter, FX + yield live" };
+      return { tone: "good", label: "Renter/FX live · yield lagret" };
     }
     if (swapsState.status === "error") {
       return { tone: "bad", label: "SEB swap feilet" };
@@ -1920,13 +1932,13 @@ export default function MarketDashboardPrototype() {
       return { tone: "warn", label: "NIBOR ikke initialisert" };
     }
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "ok") {
-      return { tone: "good", label: "FX + STIBOR + UNION live" };
+      return { tone: "good", label: "FX/STIBOR live · yield lagret" };
     }
     if (fxState.status === "ok" && stiborState.status === "ok" && yieldState.status === "partial") {
       return { tone: "warn", label: "FX/STIBOR live · UNION delvis" };
     }
     if (fxState.status === "ok" && stiborState.status === "fallback" && yieldState.status === "ok") {
-      return { tone: "warn", label: "FX + UNION live · STIBOR siste kjente" };
+      return { tone: "warn", label: "FX live · yield lagret · STIBOR siste kjente" };
     }
     if (hasError) return { tone: "bad", label: "Noen kilder feilet" };
     return { tone: "warn", label: "Henter markedsdata" };
@@ -2202,7 +2214,7 @@ export default function MarketDashboardPrototype() {
 
           <Tile
             title="Prime yield"
-            source="Snitt"
+            source="Uvektet kildesnitt"
             accent="slate"
             icon={<Building2 size={17} />}
             onClick={() => setShowYield(true)}
@@ -2215,6 +2227,12 @@ export default function MarketDashboardPrototype() {
                 { label: "Logistikk", value: formatOptionalPercent(yieldState.data.logistics.average) },
               ]}
             />
+            <div className="mt-2 text-[10px] leading-snug text-amber-800">
+              {Object.values(yieldState.data).some((segment) => summariseYieldSources(segment.sources).mixed)
+                ? "Ulike kildeperioder – ikke et samtidig markedsnivå."
+                : "Se kildeperioder og eventuelle aldersvarsler."}
+              {Object.entries(yieldState.data).map(([key, segment]) => <div key={key} className="mt-1 text-stone-500">{segment.label}: {summariseYieldSources(segment.sources).periods || "Ingen observasjoner"}</div>)}
+            </div>
           </Tile>
 
           <div className="col-span-2 mt-2 flex items-center justify-between">
@@ -2287,3 +2305,4 @@ export default function MarketDashboardPrototype() {
     </div>
   );
 }
+
